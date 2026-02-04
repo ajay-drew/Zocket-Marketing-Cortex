@@ -1,0 +1,39 @@
+services:
+  # FastAPI Backend
+  - type: web
+    name: marketing-cortex-api
+    env: python
+    region: oregon
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn src.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: false
+      - key: LOG_LEVEL
+        value: INFO
+      # Add secrets via Render dashboard:
+      # - OPENAI_API_KEY
+      # - LANGCHAIN_API_KEY
+      # - NEO4J_URI
+      # - NEO4J_PASSWORD
+      # - PINECONE_API_KEY
+      # - ZEP_API_KEY
+      # - TAVILY_API_KEY
+      # - REDIS_URL (from Redis service)
+    
+  # Redis Cache
+  - type: redis
+    name: marketing-cortex-redis
+    region: oregon
+    plan: starter
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []  # Configure as needed
+
+# Note: Neo4j should be hosted on Neo4j AuraDB (external)
+# Pinecone is a managed service (external)
+# Zep is a managed service (external)

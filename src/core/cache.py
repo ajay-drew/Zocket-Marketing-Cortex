@@ -1,0 +1,148 @@
+"""
+Redis caching layer for performance optimization
+"""
+import redis.asyncio as redis
+from typing import Optional, Any
+import json
+import logging
+from src.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+class CacheManager:
+    """Manages Redis caching for frequent queries"""
+    
+    def __init__(self):
+        """Initialize Redis client"""
+        self.redis_client: Optional[redis.Redis] = None
+        self.default_ttl = 3600  # 1 hour default TTL
+    
+    async def connect(self):
+        """Establish Redis connection"""
+        try:
+            self.redis_client = await redis.from_url(
+                settings.redis_url,
+                encoding="utf-8",
+                decode_responses=True
+            )
+            await self.redis_client.ping()
+            logger.info("Redis cache connected successfully")
+        except Exception as e:
+            logger.error(f"Redis connection failed: {e}")
+            self.redis_client = None
+    
+    async def disconnect(self):
+        """Close Redis connection"""
+        if self.redis_client:
+            await self.redis_client.close()
+            logger.info("Redis cache disconnected")
+    
+    async def get(self, key: str) -> Optional[Any]:
+        """
+        Retrieve value from cache
+        
+        Args:
+            key: Cache key
+            
+        Returns:
+            Cached value or None if not found
+        """
+        if not self.redis_client:
+            return None
+        
+        try:
+            value = await self.redis_client.get(key)
+            if value:
+                logger.debug(f"Cache hit: {key}")
+                return json.loads(value)
+            logger.debug(f"Cache miss: {key}")
+            return None
+        except Exception as e:
+            logger.error(f"Cache get error: {e}")
+            return None
+    
+    async def set(
+        self,
+        key: str,
+        value: Any,
+        ttl: Optional[int] = None
+    ) -> bool:
+        """
+        Store value in cache
+        
+        Args:
+            key: Cache key
+            value: Value to cache
+            ttl: Time to live in seconds (default: 1 hour)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.redis_client:
+            return False
+        
+        try:
+            serialized = json.dumps(value)
+            await self.redis_client.setex(
+                key,
+                ttl or self.default_ttl,
+                serialized
+            )
+            logger.debug(f"Cached: {key} (TTL: {ttl or self.default_ttl}s)")
+            return True
+        except Exception as e:
+            logger.error(f"Cache set error: {e}")
+            return False
+    
+    async def delete(self, key: str) -> bool:
+        """
+        Delete value from cache
+        
+        Args:
+            key: Cache key
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.redis_client:
+            return False
+        
+        try:
+            await self.redis_client.delete(key)
+            logger.debug(f"Deleted from cache: {key}")
+            return True
+        except Exception as e:
+            logger.error(f"Cache delete error: {e}")
+            return False
+    
+    async def clear_pattern(self, pattern: str) -> int:
+        """
+        Clear all keys matching a pattern
+        
+        Args:
+            pattern: Key pattern (e.g., "user:*")
+            
+        Returns:
+            Number of keys deleted
+        """
+        if not self.redis_client:
+            return 0
+        
+        try:
+            keys = []
+            async for key in self.redis_client.scan_iter(match=pattern):
+                keys.append(key)
+            
+            if keys:
+                deleted = await self.redis_client.delete(*keys)
+                logger.info(f"Cleared {deleted} keys matching pattern: {pattern}")
+                return deleted
+            return 0
+        except Exception as e:
+            logger.error(f"Cache clear error: {e}")
+            return 0
+
+
+# Global cache manager instance
+cache_manager = CacheManager()
