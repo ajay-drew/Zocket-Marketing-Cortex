@@ -5,10 +5,12 @@ Uses Pinecone's built-in embedding model (multilingual-e5-large)
 from typing import List, Dict, Any, Optional
 from pinecone import Pinecone, ServerlessSpec
 from src.config import settings
+from src.observability import circuit_breaker, get_alert_manager
 import logging
 import uuid
 
 logger = logging.getLogger(__name__)
+alert_manager = get_alert_manager()
 
 
 class VectorStore:
@@ -191,6 +193,7 @@ class VectorStore:
             logger.error(f"Error upserting research: {e}")
             raise
     
+    @circuit_breaker("pinecone")
     async def search_similar(
         self,
         query: str,
@@ -208,6 +211,8 @@ class VectorStore:
         Returns:
             List of similar research results with scores
         """
+        from src.observability.circuit_breaker import CircuitBreakerOpenError
+        
         try:
             # Generate embedding for query
             query_embedding = self.embed_text(query)
@@ -235,7 +240,12 @@ class VectorStore:
             
             logger.info(f"Found {len(results)} similar research results for query: {query[:50]}")
             return results
+        except CircuitBreakerOpenError:
+            # Circuit breaker is open, return empty results
+            logger.warning(f"⚠️ Circuit breaker open for Pinecone, returning empty results for: {query[:50]}")
+            return []
         except Exception as e:
+            alert_manager.record_error("pinecone_search_error", "pinecone", {"error": str(e), "query": query[:200]})
             logger.error(f"Error searching similar research: {e}")
             return []
     

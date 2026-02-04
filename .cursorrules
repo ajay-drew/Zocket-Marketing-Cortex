@@ -1806,3 +1806,139 @@ Blog Ingestion:
 - ✅ All API endpoints verified as active
 
 **Result:** ✅ Comprehensive codebase audit complete - identified 706 lines of unused code that can be safely removed while maintaining 100% functionality. Audit document provides detailed refactoring plan with risk assessment and verification checklist.
+
+---
+
+### Session 31 - February 5, 2026 (Phase 5 Simplification)
+**User Request:** Simplify Phase 5 to have only 2-3 basic evaluation metrics and reduce benchmark dataset to 20 queries max (instead of 50-100)
+
+**Execution:**
+1. **Updated Phase 5 Scope** (`PROJECT_REFERENCE.md`):
+   - Changed benchmark dataset from "50-100 queries" to "up to 20 queries"
+   - Simplified evaluation metrics from 4+ metrics to 2-3 basic metrics:
+     - **Relevance**: BERTScore > 0.85 (automated semantic similarity)
+     - **Citation Accuracy**: 100% source attribution (automated verification)
+   - Removed complex metrics: F1 Score for Extraction, ROUGE Scores, Hallucination Rate (manual review)
+   - Simplified pattern recognition to basic pattern tracking (common error types)
+
+2. **Updated Evaluation Strategy Section:**
+   - Reduced benchmark dataset size from 50-100 to up to 20 queries
+   - Focused on 2 core metrics: Relevance and Citation Accuracy
+   - Simplified testing approach (automated scripts with manual review subset)
+
+3. **Updated Success Metrics Section:**
+   - Removed: Hallucination Rate, F1 Score, ROUGE Scores
+   - Kept: Relevance Score, Citation Accuracy, Response Time, Multi-Step Reasoning, Test Coverage, API Documentation
+
+4. **Simplified Pattern Recognition Section:**
+   - Changed from complex LLM-based pattern analysis to simple error type tracking
+   - Simplified feedback loop (thumbs up/down instead of complex prompt refinement)
+   - Basic pattern tracking instead of sophisticated pattern recognition system
+
+**Files Modified:**
+- `PROJECT_REFERENCE.md` - Updated Phase 5 scope, Evaluation Strategy, Success Metrics, and Pattern Recognition sections
+
+**Key Changes:**
+- ✅ Benchmark dataset: 50-100 → up to 20 queries
+- ✅ Evaluation metrics: 4+ metrics → 2-3 basic metrics (Relevance, Citation Accuracy)
+- ✅ Pattern recognition: Complex LLM analysis → Simple error type tracking
+- ✅ Feedback loop: Sophisticated prompt refinement → Basic thumbs up/down tracking
+
+**Benefits:**
+- Faster implementation (less time creating benchmark dataset)
+- Easier maintenance (fewer metrics to track and optimize)
+- Focused evaluation (core quality metrics only)
+- Still demonstrates evaluation capability for portfolio project
+
+**Result:** ✅ Phase 5 simplified - now focuses on 2-3 basic evaluation metrics and up to 20 benchmark queries, making it more practical and achievable while still demonstrating evaluation capabilities
+
+---
+
+### Session 32 - February 5, 2026 (Phase 5 Evaluation Strategy Implementation)
+**User Request:** Implement Evaluation Strategy: Simplified to 2 core metrics with up to 20 queries
+
+**Execution:**
+1. **Created Evaluation Metrics Module** (`src/evaluation/metrics.py`):
+   - **Relevance Metric**: BERTScore calculation (with fallback to word overlap if BERTScore unavailable)
+   - **Citation Accuracy Metric**: Extracts URLs from responses, calculates citation coverage, precision/recall if expected sources provided
+   - **Comprehensive Evaluation**: Combines both metrics with weighted scoring (70% relevance, 30% citation)
+   - **Threshold Checking**: Validates relevance >= 0.85 and has citations
+
+2. **Created Benchmark Dataset** (`src/evaluation/benchmark.py`):
+   - **20 Marketing Queries**: Comprehensive benchmark dataset covering:
+     - Ad optimization (Facebook, Google Ads, YouTube)
+     - Email marketing
+     - SEO
+     - Content marketing
+     - Social media
+     - Conversion optimization
+     - Strategy and analytics
+   - **Ground Truth Answers**: Each query has detailed ground truth response
+   - **Categories**: Queries categorized by domain (seo, email, social_media, etc.)
+   - **Metadata**: Difficulty level and domain tags for each query
+   - **Save/Load**: JSON serialization for persistence
+
+3. **Created Evaluation Runner** (`src/evaluation/runner.py`):
+   - **Async Evaluation**: Evaluates queries with concurrency control (max 3 concurrent)
+   - **Agent Integration**: Uses MarketingStrategyAdvisor to get responses
+   - **Comprehensive Results**: Calculates summary statistics:
+     - Success rate
+     - Mean/min/max relevance scores
+     - Citation coverage rates
+     - Overall scores
+     - Threshold met rates
+   - **Results Export**: Saves evaluation results to JSON file
+   - **Command Line Script**: `scripts/run_evaluation.py` for easy execution
+
+4. **Added Dependencies**:
+   - Added `bert-score>=0.3.13` to `requirements.txt` for relevance calculation
+
+5. **Created Comprehensive Tests**:
+   - `tests/test_evaluation_metrics.py`: 9 tests covering:
+     - Citation extraction (single, multiple, none)
+     - Citation accuracy with/without expected sources
+     - Relevance calculation (fallback method)
+     - Comprehensive evaluation
+   - `tests/test_evaluation_benchmark.py`: 8 tests covering:
+     - BenchmarkQuery creation and serialization
+     - BenchmarkDataset save/load
+     - Category filtering
+     - Default benchmark creation
+
+6. **Key Features Implemented:**
+   - ✅ BERTScore for relevance (with fallback)
+   - ✅ Citation extraction and accuracy calculation
+   - ✅ 20-query benchmark dataset with ground truth
+   - ✅ Async evaluation runner with concurrency control
+   - ✅ Summary statistics and reporting
+   - ✅ JSON export of results
+   - ✅ Comprehensive test coverage (17 tests)
+
+**Files Created:**
+- `src/evaluation/__init__.py` - Module exports
+- `src/evaluation/metrics.py` - Evaluation metrics (250+ lines)
+- `src/evaluation/benchmark.py` - Benchmark dataset (400+ lines)
+- `src/evaluation/runner.py` - Evaluation runner (200+ lines)
+- `scripts/run_evaluation.py` - Command line script
+- `tests/test_evaluation_metrics.py` - Metrics tests (120+ lines)
+- `tests/test_evaluation_benchmark.py` - Benchmark tests (150+ lines)
+
+**Files Modified:**
+- `requirements.txt` - Added bert-score dependency
+- `src/evaluation/__init__.py` - Added exports for runner
+
+**Usage:**
+```bash
+# Run evaluation with default 20-query benchmark
+python scripts/run_evaluation.py
+
+# Run with custom dataset
+python scripts/run_evaluation.py path/to/benchmark.json path/to/results.json
+```
+
+**Evaluation Metrics:**
+- **Relevance**: BERTScore > 0.85 (automated semantic similarity)
+- **Citation Accuracy**: 100% source attribution (all sources cited)
+- **Overall Score**: Weighted combination (70% relevance, 30% citation)
+
+**Result:** ✅ Phase 5 Evaluation Strategy fully implemented - 2 core metrics (Relevance, Citation Accuracy) with 20-query benchmark dataset, async evaluation runner, comprehensive tests, and results export. Ready for evaluation runs.

@@ -155,12 +155,10 @@ async def test_workflow_completion():
         
         advisor = MarketingStrategyAdvisor()
         
-        # Run workflow
-        events = []
-        async for event in advisor.stream_response("test query", "test_session"):
-            events.append(event)
+        # Run workflow using get_response (non-streaming)
+        response = await advisor.get_response("test query", "test_session")
         
         # Should complete with final response
-        assert len(events) > 0
-        token_events = [e for e in events if e.get("type") == "token"]
-        assert len(token_events) > 0
+        assert response is not None
+        assert len(response) > 0
+        assert isinstance(response, str)

@@ -8,6 +8,8 @@ export interface Message {
   timestamp: Date;
   citations?: string[];
   reasoning?: ToolCallEvent[];
+  query?: string; // Store query for feedback
+  sessionId?: string; // Store session ID for feedback
 }
 
 interface ToolCallEvent {
@@ -33,6 +35,7 @@ interface MessageListProps {
   streamingMessage?: string;
   isStreaming?: boolean;
   toolCalls?: ToolCallEvent[];
+  sessionId?: string;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -40,6 +43,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   streamingMessage,
   isStreaming = false,
   toolCalls = [],
+  sessionId,
 }) => {
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
 

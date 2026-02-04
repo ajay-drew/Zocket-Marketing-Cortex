@@ -66,24 +66,22 @@ The solution integrates a Knowledge Graph (KG) using Neo4j to represent structur
 
 ### 3. Evaluation Strategy
 
-To evaluate the agent's performance, a hybrid approach combines automated and manual testing on a benchmark dataset of 50-100 marketing queries with ground-truth answers (curated from blogs). Key metrics include:
+To evaluate the agent's performance, a simple approach combines automated testing on a benchmark dataset of up to 20 marketing queries with ground-truth answers (curated from blogs). Key metrics include:
 
 - **Relevance**: Automated via semantic similarity (e.g., BERTScore > 0.85 between output and ground truth).
-- **Hallucination Rate**: Manual review of 20% samples, scoring factual inaccuracies (target <5%); automated via fact-checking against source citations.
-- **F1 Score for Extraction**: Automated for key insight extraction (e.g., precision/recall of pulled entities like "ad platforms," aiming for F1 > 0.8).
-- **ROUGE for Summaries**: Automated for synthesis quality (ROUGE-1/2/L scores > 0.7 comparing generated strategies to expert summaries).
+- **Citation Accuracy**: Automated verification that all claims in responses are properly cited with source URLs (target: 100% citation coverage).
 
-Testing involves automated scripts (e.g., via pytest on sample queries) for scalability, supplemented by manual annotation for nuanced aspects like contextual understanding, ensuring comprehensive assessment.
+Testing involves automated scripts (e.g., via pytest on sample queries) for scalability, with manual review of a subset for nuanced aspects like contextual understanding.
 
 ### 4. Pattern Recognition and Improvement Loop
 
-The agent adapts over time through a feedback loop integrated via LangGraph's memory nodes and Zep. For pattern recognition, it logs query-response pairs, identifying recurring errors (e.g., over-broad searches) via LLM analysis of history. Improvement occurs via:
+The agent adapts over time through a simple feedback loop integrated via Zep memory. For basic pattern tracking, it logs query-response pairs and common error types (e.g., over-broad searches, missing citations). Improvement occurs via:
 
 - **Memory Modules**: Zep stores session data, allowing prompt injection of past refinements (e.g., "User previously preferred B2C examples—prioritize accordingly").
-- **Feedback Loops**: Post-response, simulate user feedback (or integrate API for real) to refine prompts (e.g., if hallucination detected, add stricter citation rules).
-- **Prompt Refinement**: Based on prior errors, dynamically update system prompts (e.g., "Emphasize multi-source synthesis if single-blog results were insufficient last time").
+- **Simple Feedback Loop**: Post-response, collect user feedback (thumbs up/down) and track common failure patterns.
+- **Basic Pattern Tracking**: Identify recurring error types (missing citations, low relevance) and adjust prompts accordingly.
 
-This creates a self-improving cycle, enhancing accuracy by 10-15% over iterations without retraining.
+This creates a simple self-improving cycle, enhancing accuracy over iterations without retraining.
 
 ### 5. Error Handling & Resilience
 
@@ -243,22 +241,19 @@ This observability stack enables real-time monitoring, rapid debugging, performa
 - Health check endpoints
 
 **Phase 5: Evaluation & Improvement** 📋 PLANNED
-- Benchmark dataset creation (50-100 queries)
-- Automated evaluation metrics
-- Feedback loop implementation
-- Pattern recognition system
+- Benchmark dataset creation (up to 20 queries)
+- Basic automated evaluation metrics (2-3 metrics: Relevance, Citation Accuracy)
+- Simple feedback loop implementation
+- Basic pattern tracking (common error types)
 
 ---
 
 ## 📊 Success Metrics
 
-- **Relevance Score**: BERTScore > 0.85
-- **Hallucination Rate**: <5% (manual review)
-- **F1 Score for Extraction**: > 0.8
-- **ROUGE Scores**: ROUGE-1/2/L > 0.7
+- **Relevance Score**: BERTScore > 0.85 (automated semantic similarity)
+- **Citation Accuracy**: 100% source attribution (all sources cited in responses)
 - **Response Time**: <10s for complex queries
 - **Multi-Step Reasoning**: 2-4 tool calls per query (implemented with LangGraph)
-- **Citation Accuracy**: 100% source attribution (all sources cited in responses)
 - **Test Coverage**: 37+ comprehensive tests (unit, integration, E2E)
 - **API Documentation**: 100% endpoint coverage with OpenAPI/Swagger tags
 

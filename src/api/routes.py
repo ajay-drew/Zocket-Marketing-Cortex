@@ -21,7 +21,8 @@ from src.api.models import (
     EntityResponse,
     EntityContextResponse,
     EntityExtractionRequest,
-    EntityExtractionResponse
+    EntityExtractionResponse,
+    ErrorResponse
 )
 from src.knowledge.graph_schema import graph_schema
 from src.core.memory import memory_manager
@@ -29,12 +30,63 @@ from src.core.cache import cache_manager
 from src.integrations.tavily_client import tavily_client
 from src.agents.marketing_strategy_advisor import marketing_strategy_advisor
 from src.config import settings
+from src.observability import (
+    get_structured_logger,
+    set_request_id,
+    get_request_id,
+    get_alert_manager,
+    get_langsmith_client,
+    get_langfuse_client
+)
+from src.observability.circuit_breaker import get_circuit_breaker
+from src.observability.circuit_breaker import CircuitBreakerOpenError
 from datetime import datetime
 import logging
 import uuid
 import json
 
-logger = logging.getLogger(__name__)
+logger = get_structured_logger(__name__)
+alert_manager = get_alert_manager()
+
+
+def create_error_response(
+    error_code: str,
+    error_message: str,
+    error_type: str = "server_error",
+    details: Optional[Dict[str, Any]] = None,
+    status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
+) -> HTTPException:
+    """
+    Create a structured error response
+    
+    Args:
+        error_code: Error code for programmatic handling
+        error_message: Human-readable error message
+        error_type: Error type (validation, server, client, etc.)
+        details: Additional error details
+        status_code: HTTP status code
+        
+    Returns:
+        HTTPException with structured error response
+    """
+    from datetime import datetime
+    
+    # Ensure details is a dict and convert datetime to string
+    if details is None:
+        details = {}
+    else:
+        details = {k: v.isoformat() if isinstance(v, datetime) else v for k, v in details.items()}
+    error_response = ErrorResponse(
+        error_code=error_code,
+        error_message=error_message,
+        error_type=error_type,
+        details=details or {},
+        request_id=get_request_id()
+    )
+    return HTTPException(
+        status_code=status_code,
+        detail=error_response.model_dump(mode='json')  # Use mode='json' to serialize datetime
+    )
 
 router = APIRouter()
 
@@ -50,6 +102,7 @@ router = APIRouter()
 async def health_check():
     """
     Health check endpoint that verifies all services are operational
+    Includes circuit breaker status, observability platform status, and performance metrics
     """
     services = {}
     
@@ -72,16 +125,49 @@ async def health_check():
     # Check Zep (memory)
     try:
         # Simple check - try to get a test session
-        await memory_manager.get_memory("health-check")
+        memory_manager.get_memory("health-check")
         services["zep"] = "healthy"
     except Exception as e:
         logger.error(f"Zep health check failed: {e}")
         services["zep"] = f"unhealthy: {str(e)}"
     
+    # Get circuit breaker status
+    circuit_breakers = {}
+    for cb_name in ["tavily", "pinecone", "zep"]:
+        try:
+            cb = get_circuit_breaker(cb_name)
+            circuit_breakers[cb_name] = cb.get_status()
+        except Exception as e:
+            circuit_breakers[cb_name] = {"error": str(e)}
+    
+    # Get observability platform status
+    observability = {}
+    try:
+        langsmith_client = get_langsmith_client()
+        observability["langsmith"] = "connected" if langsmith_client else "not_configured"
+    except Exception as e:
+        observability["langsmith"] = f"error: {str(e)}"
+    
+    try:
+        langfuse_client = get_langfuse_client()
+        observability["langfuse"] = "connected" if langfuse_client else "not_configured"
+    except Exception as e:
+        observability["langfuse"] = f"error: {str(e)}"
+    
+    # Get performance metrics (simplified - in production, this would query metrics store)
+    performance = {
+        "p50_latency": 0.0,  # Placeholder - would be calculated from recent requests
+        "p95_latency": 0.0,
+        "p99_latency": 0.0
+    }
+    
     return HealthResponse(
         status="healthy" if all("healthy" in v for v in services.values()) else "degraded",
         timestamp=datetime.utcnow(),
-        services=services
+        services=services,
+        circuit_breakers=circuit_breakers,
+        observability=observability,
+        performance=performance
     )
 
 
@@ -97,9 +183,18 @@ async def run_agent(request: AgentRequest):
     """
     Run the agent with a query and return the complete response
     """
+    request_id = set_request_id()
     session_id = request.session_id or str(uuid.uuid4())
     
     try:
+        logger.log_with_context(
+            logging.INFO,
+            "Running agent (non-streaming)",
+            query=request.query[:200],
+            session_id=session_id,
+            metadata={"request_id": request_id}
+        )
+        
         response_text = await marketing_strategy_advisor.get_response(
             query=request.query,
             session_id=session_id,
@@ -112,11 +207,36 @@ async def run_agent(request: AgentRequest):
             session_id=session_id,
             metadata=request.metadata
         )
+    except CircuitBreakerOpenError as e:
+        alert_manager.record_error("agent_circuit_breaker", "api", {"session_id": session_id})
+        logger.log_with_context(
+            logging.ERROR,
+            f"Circuit breaker open: {e}",
+            query=request.query[:200],
+            session_id=session_id
+        )
+        raise create_error_response(
+            error_code="CIRCUIT_BREAKER_OPEN",
+            error_message="Service temporarily unavailable. Please try again later.",
+            error_type="service_unavailable",
+            details={"service": "agent", "session_id": session_id},
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
     except Exception as e:
-        logger.error(f"Error running agent: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Agent execution failed: {str(e)}"
+        alert_manager.record_error("agent_execution_error", "api", {"error": str(e), "session_id": session_id})
+        logger.log_with_context(
+            logging.ERROR,
+            f"Error running agent: {e}",
+            query=request.query[:200],
+            session_id=session_id,
+            metadata={"error": str(e)}
+        )
+        raise create_error_response(
+            error_code="AGENT_EXECUTION_FAILED",
+            error_message=f"Agent execution failed: {str(e)}",
+            error_type="server_error",
+            details={"session_id": session_id},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 

@@ -36,6 +36,16 @@ class Settings(BaseSettings):
     langfuse_secret_key: Optional[str] = None
     langfuse_host: str = "https://cloud.langfuse.com"
     
+    # Observability
+    enable_langsmith: bool = True
+    enable_langfuse: bool = True
+    circuit_breaker_failure_threshold: int = 5
+    circuit_breaker_timeout: int = 60
+    retry_max_attempts: int = 3
+    retry_base_delay: float = 1.0
+    alert_error_rate_threshold: int = 10
+    alert_performance_threshold: float = 15.0
+    
     # Neo4j
     neo4j_uri: str
     neo4j_username: str = "neo4j"

@@ -14,10 +14,19 @@ from src.config import settings
 from src.integrations.tavily_client import tavily_client
 from src.knowledge.vector_store import vector_store
 from src.core.memory import memory_manager
+from src.observability import (
+    trace_agent_execution,
+    trace_with_langfuse,
+    get_structured_logger,
+    set_session_id,
+    get_alert_manager
+)
 import logging
 import json
+import time
 
-logger = logging.getLogger(__name__)
+logger = get_structured_logger(__name__)
+alert_manager = get_alert_manager()
 
 
 class AgentState(TypedDict):
@@ -758,6 +767,8 @@ Always include citations (URLs) for each insight."""
             logger.error(f"Error getting memory context: {e}")
             return []
     
+    @trace_agent_execution
+    @trace_with_langfuse
     async def stream_response(
         self,
         query: str,
@@ -770,8 +781,16 @@ Always include citations (URLs) for each insight."""
         Yields:
             Dict with 'type' and 'content' keys for SSE streaming
         """
+        start_time = time.time()
+        set_session_id(session_id)
+        
         try:
-            logger.info(f"[AGENT] Starting stream_response - Session: {session_id}, Query: {query[:100]}")
+            logger.log_with_context(
+                logging.INFO,
+                "Starting agent stream response",
+                query=query[:200],
+                session_id=session_id
+            )
             
             # Get conversation history
             chat_history = await self.get_memory_context(session_id)
@@ -829,8 +848,27 @@ Always include citations (URLs) for each insight."""
                 metadata={"agent": "marketing_strategy_advisor", **(metadata or {})}
             )
             
+            # Track performance
+            duration = time.time() - start_time
+            alert_manager.record_latency(duration, "agent", "stream_response")
+            logger.log_with_context(
+                logging.INFO,
+                f"Agent stream response completed in {duration:.2f}s",
+                query=query[:200],
+                session_id=session_id,
+                metadata={"duration": duration, "response_length": len(final_response)}
+            )
+            
         except Exception as e:
-            logger.error(f"Error streaming response: {e}", exc_info=True)
+            duration = time.time() - start_time
+            alert_manager.record_error("stream_response_error", "agent", {"error": str(e), "query": query[:200]})
+            logger.log_with_context(
+                logging.ERROR,
+                f"Error streaming response: {e}",
+                query=query[:200],
+                session_id=session_id,
+                metadata={"duration": duration, "error": str(e)}
+            )
             yield {
                 "type": "error",
                 "content": f"Error: {str(e)}"
@@ -843,11 +881,46 @@ Always include citations (URLs) for each insight."""
         metadata: Optional[Dict[str, Any]] = None
     ) -> str:
         """Get complete agent response (non-streaming)"""
-        response_parts = []
-        async for chunk in self.stream_response(query, session_id, metadata):
-            if chunk.get("type") == "token":
-                response_parts.append(chunk.get("content", ""))
-        return "".join(response_parts)
+        set_session_id(session_id)
+        
+        # Get conversation history
+        chat_history = await self.get_memory_context(session_id)
+        
+        # Initialize state
+        initial_state: AgentState = {
+            "messages": chat_history,
+            "query": query,
+            "original_query": query,
+            "tool_results": {},
+            "selected_tools": [],
+            "result_quality": {},
+            "refined_query": None,
+            "synthesis_input": None,
+            "final_response": None,
+            "tool_call_events": []
+        }
+        
+        # Run workflow
+        final_state = await self.workflow.ainvoke(initial_state)
+        
+        # Get final response
+        final_response = final_state.get("final_response", "No response generated")
+        
+        # Store in memory
+        await memory_manager.add_message(
+            session_id=session_id,
+            role="user",
+            content=query,
+            metadata=metadata
+        )
+        await memory_manager.add_message(
+            session_id=session_id,
+            role="assistant",
+            content=final_response,
+            metadata={"agent": "marketing_strategy_advisor", **(metadata or {})}
+        )
+        
+        return final_response
 
 
 # Global marketing strategy advisor instance

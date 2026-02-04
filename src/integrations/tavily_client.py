@@ -14,8 +14,10 @@ from datetime import datetime, timedelta
 import httpx
 from src.config import settings
 from src.core.cache import cache_manager
+from src.observability import circuit_breaker, get_alert_manager
 
 logger = logging.getLogger(__name__)
+alert_manager = get_alert_manager()
 
 
 class TavilyRateLimitError(Exception):
@@ -254,6 +256,7 @@ class TavilyClient:
             logger.error(f"Tavily search failed: {e}")
             raise
     
+    @circuit_breaker("tavily")
     async def search_with_fallback(
         self,
         query: str,
@@ -271,13 +274,23 @@ class TavilyClient:
         Returns:
             Search results (from Tavily or fallback)
         """
+        from src.observability.circuit_breaker import CircuitBreakerOpenError
+        
         try:
             # Try Tavily first
             return await self.search(query, search_type, max_results)
+        except CircuitBreakerOpenError:
+            # Circuit breaker is open, use fallback
+            logger.warning(f"⚠️ Circuit breaker open, using fallback search for: {query}")
+            return await self._fallback_search(query, max_results)
         except TavilyRateLimitError:
             # Fall back to alternative search
             logger.warning(f"⚠️ Using fallback search for: {query}")
             return await self._fallback_search(query, max_results)
+        except Exception as e:
+            # Record error for alerting
+            alert_manager.record_error("tavily_search_error", "tavily", {"error": str(e), "query": query[:200]})
+            raise
     
     async def _fallback_search(
         self,

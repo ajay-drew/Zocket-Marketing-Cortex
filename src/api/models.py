@@ -11,6 +11,9 @@ class HealthResponse(BaseModel):
     status: str
     timestamp: datetime
     services: Dict[str, str]
+    circuit_breakers: Optional[Dict[str, Dict[str, Any]]] = None
+    observability: Optional[Dict[str, str]] = None
+    performance: Optional[Dict[str, float]] = None
 
 
 class AgentRequest(BaseModel):
@@ -146,3 +149,13 @@ class EntityExtractionResponse(BaseModel):
     """Response from entity extraction"""
     entities: List[Dict[str, Any]] = Field(default_factory=list)
     relationships: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ErrorResponse(BaseModel):
+    """Structured error response"""
+    error_code: str = Field(..., description="Error code for programmatic handling")
+    error_message: str = Field(..., description="Human-readable error message")
+    error_type: str = Field(..., description="Error type (validation, server, client, etc.)")
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    details: Optional[Dict[str, Any]] = Field(None, description="Additional error details")
+    request_id: Optional[str] = Field(None, description="Request ID for tracking")

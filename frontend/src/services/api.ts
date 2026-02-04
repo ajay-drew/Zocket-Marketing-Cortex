@@ -310,6 +310,7 @@ export async function ingestBlogStream(
 /**
  * Refresh blog content
  */
+
 export async function refreshBlog(blogName?: string): Promise<any> {
   let url: string;
   if (API_BASE_URL) {

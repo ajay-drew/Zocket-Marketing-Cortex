@@ -5,9 +5,11 @@ from typing import List, Dict, Optional
 from zep_python.client import Zep
 from zep_python import Memory, Message, Session
 from src.config import settings
+from src.observability import circuit_breaker, get_alert_manager
 import logging
 
 logger = logging.getLogger(__name__)
+alert_manager = get_alert_manager()
 
 
 class MemoryManager:
@@ -44,6 +46,7 @@ class MemoryManager:
             logger.error(f"Error creating session: {e}")
             raise
     
+    @circuit_breaker("zep")
     async def add_message(
         self,
         session_id: str,
@@ -60,6 +63,8 @@ class MemoryManager:
             content: Message content
             metadata: Optional metadata dictionary
         """
+        from src.observability.circuit_breaker import CircuitBreakerOpenError
+        
         try:
             import asyncio
             message = Message(
@@ -74,10 +79,15 @@ class MemoryManager:
                 lambda: self.client.memory.add(session_id, messages=[message])
             )
             logger.debug(f"Added {role} message to session {session_id}")
+        except CircuitBreakerOpenError:
+            # Circuit breaker is open, continue without memory
+            logger.warning(f"⚠️ Circuit breaker open for Zep, skipping message storage for session {session_id}")
         except Exception as e:
+            alert_manager.record_error("zep_add_message_error", "zep", {"error": str(e), "session_id": session_id})
             logger.error(f"Error adding message: {e}")
-            raise
+            # Don't raise - allow agent to continue without memory
     
+    @circuit_breaker("zep")
     def get_memory(self, session_id: str) -> Optional[Memory]:
         """
         Retrieve conversation memory for a session
@@ -88,11 +98,18 @@ class MemoryManager:
         Returns:
             Memory object with conversation history
         """
+        from src.observability.circuit_breaker import CircuitBreakerOpenError
+        
         try:
             memory = self.client.memory.get(session_id)
             logger.debug(f"Retrieved memory for session {session_id}")
             return memory
+        except CircuitBreakerOpenError:
+            # Circuit breaker is open, return None (no memory)
+            logger.warning(f"⚠️ Circuit breaker open for Zep, returning no memory for session {session_id}")
+            return None
         except Exception as e:
+            alert_manager.record_error("zep_get_memory_error", "zep", {"error": str(e), "session_id": session_id})
             logger.error(f"Error retrieving memory: {e}")
             return None
     

@@ -36,18 +36,20 @@ export const ChatInterface: React.FC = () => {
   // When streaming completes, add assistant message to list and save to history
   React.useEffect(() => {
     if (!isStreaming && streamingMessage) {
+      const lastUserMessage = [...messages].reverse().find((msg) => msg.role === 'user');
       const assistantMessage: Message = {
         id: `msg_${Date.now()}_assistant`,
         role: 'assistant',
         content: streamingMessage,
         timestamp: new Date(),
         reasoning: toolCalls.length > 0 ? toolCalls : undefined, // Store reasoning steps
+        query: lastUserMessage?.content, // Store query for feedback
+        sessionId: sessionId, // Store session ID for feedback
       };
       setMessages((prev) => {
         const updated = [...prev, assistantMessage];
         
         // Save to research history (find the last user message)
-        const lastUserMessage = [...prev].reverse().find((msg) => msg.role === 'user');
         if (lastUserMessage) {
           try {
             const historyItem = {
@@ -73,7 +75,7 @@ export const ChatInterface: React.FC = () => {
       });
       clearMessage();
     }
-  }, [isStreaming, streamingMessage, clearMessage]);
+  }, [isStreaming, streamingMessage, clearMessage, messages, sessionId, toolCalls]);
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
@@ -92,6 +94,7 @@ export const ChatInterface: React.FC = () => {
           streamingMessage={streamingMessage}
           isStreaming={isStreaming}
           toolCalls={toolCalls}
+          sessionId={sessionId}
         />
       </div>
 

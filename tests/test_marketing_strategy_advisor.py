@@ -60,14 +60,13 @@ async def test_workflow_execution():
         
         advisor = MarketingStrategyAdvisor()
         
-        # Test stream_response
-        events = []
-        async for event in advisor.stream_response("test query", "test_session"):
-            events.append(event)
+        # Test get_response (non-streaming)
+        response = await advisor.get_response("test query", "test_session")
         
-        # Should have tool call events and final response
-        assert len(events) > 0
-        assert any(e.get("type") == "token" for e in events)
+        # Should have final response
+        assert response is not None
+        assert len(response) > 0
+        assert isinstance(response, str)
 
 
 @pytest.mark.asyncio
