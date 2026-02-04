@@ -22,7 +22,7 @@ async def test_root_endpoint():
 async def test_health_check():
     """Test health check endpoint"""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/v1/health")
+        response = await client.get("/api/health")
         assert response.status_code == 200
         data = response.json()
         assert "status" in data
@@ -38,7 +38,7 @@ async def test_run_agent_endpoint():
             "query": "What are my top performing campaigns?",
             "session_id": "test_session_001"
         }
-        response = await client.post("/api/v1/run-agent", json=payload)
+        response = await client.post("/api/run-agent", json=payload)
         assert response.status_code == 200
         data = response.json()
         assert "response" in data

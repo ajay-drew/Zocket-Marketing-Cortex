@@ -16,9 +16,10 @@ class MemoryManager:
     def __init__(self):
         """Initialize Zep client"""
         self.client = Zep(
-            api_key=settings.zep_api_key
+            api_key=settings.zep_api_key,
+            base_url=settings.zep_api_url
         )
-        logger.info("Zep Memory Manager initialized")
+        logger.info(f"Zep Memory Manager initialized - URL: {settings.zep_api_url}")
     
     def create_session(self, session_id: str, user_id: Optional[str] = None) -> Session:
         """
@@ -43,7 +44,7 @@ class MemoryManager:
             logger.error(f"Error creating session: {e}")
             raise
     
-    def add_message(
+    async def add_message(
         self,
         session_id: str,
         role: str,
@@ -60,12 +61,18 @@ class MemoryManager:
             metadata: Optional metadata dictionary
         """
         try:
+            import asyncio
             message = Message(
                 role=role,
                 content=content,
                 metadata=metadata or {}
             )
-            self.client.memory.add(session_id, messages=[message])
+            # Run synchronous Zep call in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self.client.memory.add(session_id, messages=[message])
+            )
             logger.debug(f"Added {role} message to session {session_id}")
         except Exception as e:
             logger.error(f"Error adding message: {e}")

@@ -1,42 +1,50 @@
 # Core Framework
-fastapi
-uvicorn[standard]
-pydantic
-pydantic-settings
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
 
 # LangChain & LangGraph
-langchain
-langchain-groq
-langchain-community
-langgraph
-langsmith
+langchain>=0.1.0
+langchain-groq>=0.0.1
+langchain-community>=0.0.20
+langchain-core>=0.1.0
+langgraph>=0.0.20
+langsmith>=0.1.0
 
 # Vector & Graph Databases
-neo4j
-pinecone
-chromadb
+neo4j>=5.15.0
+pinecone>=3.0.0
+chromadb>=0.4.0
 
 # Memory & Caching
-zep-python
-redis
+zep-python>=0.35.0
+redis>=5.0.0
 
 # External APIs
-tavily-python
-httpx
+tavily-python>=0.3.0
+httpx>=0.25.0
 
 # Observability
-langfuse
+langfuse>=2.0.0
 
 # Data Processing
-pandas
-numpy
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Blog Ingestion
+feedparser>=6.0.10
+readability-lxml>=0.8.1
+beautifulsoup4>=4.12.2
+lxml>=5.1.0  # Note: Python 3.13+ requires lxml>=6.0.0 for pre-built wheels
+sentence-transformers>=2.2.0
 
 # Testing
-pytest
-pytest-asyncio
-pytest-cov
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
 
 # Utilities
-python-dotenv
-python-multipart
-aiofiles
+python-dotenv>=1.0.0
+python-multipart>=0.0.6
+aiofiles>=23.2.0

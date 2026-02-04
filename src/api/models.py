@@ -70,3 +70,39 @@ class PerformanceCreate(BaseModel):
     conversions: int
     spend: float
     revenue: float
+
+
+class BlogIngestRequest(BaseModel):
+    """Request to ingest blog content"""
+    blog_url: str = Field(..., description="RSS feed URL")
+    blog_name: str = Field(..., description="Name of the blog")
+    max_posts: int = Field(50, description="Maximum number of posts to ingest")
+
+
+class BlogIngestResponse(BaseModel):
+    """Response from blog ingestion"""
+    status: str
+    blog_name: str
+    posts_ingested: int
+    chunks_created: int
+    errors: int
+    total_entries: Optional[int] = None
+    message: Optional[str] = None
+
+
+class BlogRefreshRequest(BaseModel):
+    """Request to refresh blog content"""
+    blog_name: Optional[str] = Field(None, description="Blog name to refresh, or None for all blogs")
+
+
+class BlogSource(BaseModel):
+    """Blog source information"""
+    name: str
+    url: str
+    total_posts: int = 0
+    last_updated: Optional[str] = None
+
+
+class BlogSourcesResponse(BaseModel):
+    """Response with list of blog sources"""
+    sources: List[BlogSource]

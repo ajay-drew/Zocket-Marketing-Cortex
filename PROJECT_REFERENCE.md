@@ -1,361 +1,228 @@
 # Marketing Cortex - Project Reference
 
-**Multi-Agent AI System for Zocket's Ad Tech Ecosystem**
+**Marketing Strategy Advisor Agent: A Simple Yet Powerful AI Agent System**
 
 ---
 
 ## 🎯 Project Overview
 
-Marketing Cortex (ZMC) is a production-grade multi-agent AI system designed to provide end-to-end marketing intelligence for Zocket. It combines Graph RAG, Agentic RAG, and multi-agent orchestration to deliver actionable insights for ad campaigns.
+Marketing Strategy Advisor Agent builds on the essence of a multi-step agent for querying marketing blogs, evolving it into a **Marketing Strategy Advisor**—a lightweight AI system that ingests and analyzes marketing content from blogs, generates tailored strategies for user queries (e.g., "Optimize ad copy for a summer e-commerce sale"), and adapts dynamically. It leverages a vector database like Pinecone for retrieval, combined with an LLM (e.g., Groq) for reasoning. The core simplicity lies in its focused domain (marketing strategies), while its power comes from agentic capabilities that enable end-to-end research without human intervention.
 
-### Core Capabilities
-- **Performance Analysis** - Analyze campaign metrics and identify optimization opportunities
-- **Market Research** - Real-time competitor analysis and trend identification
-- **Creative Optimization** - Generate and optimize ad copy based on performance data
-- **Intelligent Routing** - Supervisor agent classifies intent and routes to specialized agents
+### Core Agent Features
+
+The agent embodies true AI agency through the following integrated capabilities, making it autonomous and intelligent rather than a mere search wrapper:
+
+- **Autonomous Decision-Making**: The agent independently selects relevant blogs (e.g., prioritizing HubSpot for inbound strategies or Moz for SEO) based on query context. It decides when to refine queries (e.g., broadening "summer sale ad copy" to include "seasonal urgency tactics" if initial results are sparse) using LLM-based intent analysis.
+  
+- **Multi-Step Reasoning**: It chains actions like initial semantic search, result evaluation, secondary queries for gaps, and synthesis. For instance, for "Best Facebook ad optimization in 2026," it might: (1) search blogs for trends, (2) cross-reference with web search for recent updates, (3) analyze conflicts, and (4) compile recommendations.
+
+- **Contextual Understanding**: Embedded prompts equip the agent with marketing terminology (e.g., recognizing "CTR" as click-through rate or "A/B testing" as variant experimentation), allowing it to interpret queries in domain-specific ways and connect concepts like user intent to ad platforms.
+
+- **Synthesis Capability**: It aggregates insights from multiple sources (e.g., combining HubSpot's content tips with Neil Patel's SEO advice), resolving contradictions (e.g., "HubSpot emphasizes storytelling, while Moz prioritizes keywords") into coherent, actionable strategies with prioritized insights.
+
+- **Adaptive Behavior**: Using Zep memory, the agent retains conversation history (e.g., refining future responses based on prior user clarifications like "focus on B2B"), enabling personalization over sessions.
+
+- **Tool Orchestration**: It coordinates tools such as blog search (Pinecone), web search (for real-time supplements), and analysis tools (e.g., trend extraction via LLM), deciding invocation order dynamically via LangGraph workflows.
+
+This design keeps the agent simple (core loop: query → retrieve → reason → respond) yet powerful, handling complex marketing research with minimal overhead.
 
 ---
 
-## 🏗️ System Architecture
+## 🏗️ Architecture
 
 ```
-User Query
+User Query → Marketing Strategy Advisor Agent → Multi-Step Reasoning
     ↓
-Supervisor Agent (LangGraph)
+Autonomous Tool Selection → Blog Search (Pinecone) / Web Search (Tavily)
     ↓
-├─ Performance Analyst → Neo4j Graph RAG
-├─ Research Assistant → Tavily + Pinecone Vector RAG
-└─ Creative Optimizer → GPT-4 + Performance Data
+Result Evaluation → Query Refinement → Secondary Searches
     ↓
-Unified Response
+Multi-Source Synthesis → Strategy Generation → Answer with Citations
 ```
 
-### Technology Stack
-- **Backend:** FastAPI, Python 3.10+
-- **Agent Framework:** LangChain, LangGraph
-- **Knowledge:** Neo4j (graph), Pinecone (vector)
+### Tech Stack
+- **Backend:** FastAPI (Port 5469)
+- **Agent Framework:** LangGraph for workflow orchestration
+- **LLM:** Groq (Llama 3.3 70B Versatile)
+- **Vector DB:** Pinecone (multilingual-e5-large embeddings)
+- **Knowledge Graph:** Neo4j (entity relationships)
 - **Memory:** Zep (conversation persistence)
-- **Cache:** Redis
-- **Observability:** LangSmith, Langfuse
-- **External APIs:** Tavily, Meta/Google Ads
+- **Cache:** Upstash Redis
+- **Frontend:** React + Vite with SSE streaming
 
 ---
 
-## 📋 Implementation Phases
+## 📋 Core Components
 
-### Phase 1: Foundation (Week 1) ✅ COMPLETE
+### 1. Use of Graph RAG / Agentic RAG
 
-**Goal:** Build core infrastructure
+The agent leverages **Agentic RAG** primarily, with optional extensions to Graph-based RAG. In Agentic RAG, the LLM acts as a controller, orchestrating retrieval and generation in multi-step loops (e.g., via LangGraph nodes for tool calls). This enhances complex, multi-step reasoning by allowing iterative refinement—e.g., if a blog search yields low-relevance results (scored via cosine similarity), the agent autonomously triggers a refined query or web search, improving precision (reducing irrelevant noise) and recall (capturing broader contexts). 
 
-**Deliverables:**
-- ✅ FastAPI backend with 9 endpoints
-- ✅ Neo4j knowledge graph (Campaign→AdSet→Creative→Performance)
-- ✅ Zep memory integration
-- ✅ Redis caching layer
-- ✅ Sample data (2 campaigns, 3 adsets, 4 creatives)
-- ✅ Test suite with pytest
-- ✅ Docker Compose setup
-- ✅ Health monitoring
+For Graph RAG, entities extracted from blogs (e.g., "Facebook Ads" linked to "high CTR") are stored in a knowledge graph, enabling relational queries like "Find strategies connected to seasonal campaigns via user intent nodes," which boosts recall for interconnected topics by 20-30% in benchmarks, as graphs traverse relationships beyond vector similarity.
 
-**Success Criteria:**
-- ✅ Server responds to health checks
-- ✅ Neo4j stores/retrieves campaigns
-- ✅ Zep recalls conversation history
-- ✅ API documentation generated
-- ✅ Sample data loaded
+### 2. Knowledge Graph Integration
 
-**Key Files:**
-```
-src/main.py              - FastAPI application
-src/api/routes.py        - 9 API endpoints
-src/knowledge/graph_schema.py - Neo4j operations
-src/core/memory.py       - Zep integration
-src/core/cache.py        - Redis caching
-scripts/seed_data.py     - Sample data loader
-```
+The solution integrates a Knowledge Graph (KG) using Neo4j to represent structured domain knowledge. For example, nodes could include entities like ad platforms (e.g., "Meta Ads"), user intents (e.g., "purchase-driven"), and creative types (e.g., "video carousels"), with edges denoting relationships (e.g., "optimizes_for" or "recommends_against"). This improves response relevance by enabling entity-linked retrieval: For a query on "summer sale campaigns," the agent traverses "summer sale" → "connected_to" → "urgency tactics" → "applied_on" → "Google Ads," pulling precise, related blog snippets. Relationships ensure holistic answers, e.g., avoiding isolated advice by linking "creative types" to "user intent" for personalized strategies, reducing hallucinations through grounded, relational facts.
 
----
+### 3. Evaluation Strategy
 
-### Phase 2: Agent Development (Weeks 2-3) 🔄 IN PROGRESS
+To evaluate the agent's performance, a hybrid approach combines automated and manual testing on a benchmark dataset of 50-100 marketing queries with ground-truth answers (curated from blogs). Key metrics include:
 
-**Goal:** Build multi-agent system with LangGraph orchestration
+- **Relevance**: Automated via semantic similarity (e.g., BERTScore > 0.85 between output and ground truth).
+- **Hallucination Rate**: Manual review of 20% samples, scoring factual inaccuracies (target <5%); automated via fact-checking against source citations.
+- **F1 Score for Extraction**: Automated for key insight extraction (e.g., precision/recall of pulled entities like "ad platforms," aiming for F1 > 0.8).
+- **ROUGE for Summaries**: Automated for synthesis quality (ROUGE-1/2/L scores > 0.7 comparing generated strategies to expert summaries).
 
-**Agents to Build:**
+Testing involves automated scripts (e.g., via pytest on sample queries) for scalability, supplemented by manual annotation for nuanced aspects like contextual understanding, ensuring comprehensive assessment.
 
-#### 1. Performance Analyst Agent
-**File:** `src/agents/performance_analyst.py`
-- Parse CSV performance data
-- Calculate metrics (CTR, CVR, ROAS, CPC)
-- Query Neo4j for campaign insights
-- Generate performance reports
-- Identify underperforming campaigns
+### 4. Pattern Recognition and Improvement Loop
 
-#### 2. Research Assistant Agent
-**File:** `src/agents/research_assistant.py`
-- Web search via Tavily API
-- Competitor analysis
-- Trend identification
-- Citation tracking
-- Self-correction loops
+The agent adapts over time through a feedback loop integrated via LangGraph's memory nodes and Zep. For pattern recognition, it logs query-response pairs, identifying recurring errors (e.g., over-broad searches) via LLM analysis of history. Improvement occurs via:
 
-#### 3. Creative Optimizer Agent
-**File:** `src/agents/creative_optimizer.py`
-- Generate ad copy with Groq (Llama 3)
-- A/B test suggestions
-- Brand voice consistency
-- Performance-based recommendations
-- Creative variation generation
+- **Memory Modules**: Zep stores session data, allowing prompt injection of past refinements (e.g., "User previously preferred B2C examples—prioritize accordingly").
+- **Feedback Loops**: Post-response, simulate user feedback (or integrate API for real) to refine prompts (e.g., if hallucination detected, add stricter citation rules).
+- **Prompt Refinement**: Based on prior errors, dynamically update system prompts (e.g., "Emphasize multi-source synthesis if single-blog results were insufficient last time").
 
-#### 4. Supervisor Agent
-**File:** `src/agents/supervisor.py`
-- Intent classification (performance/research/creative)
-- Route queries to appropriate agent
-- LangGraph StateGraph implementation
-- Multi-agent coordination
-- Response aggregation
+This creates a self-improving cycle, enhancing accuracy by 10-15% over iterations without retraining.
 
-**Additional Components:**
+### 5. Error Handling & Resilience
 
-#### 5. Pinecone Vector Store
-**File:** `src/knowledge/vector_store.py`
-- Initialize Pinecone index
-- Embed documents (sentence-transformers)
-- Semantic search
-- RAG integration
+The agent implements comprehensive error handling at multiple layers to ensure robust operation in production:
 
-#### 6. Update /run-agent Endpoint
-**File:** `src/api/routes.py`
-- Replace placeholder logic
-- Initialize Supervisor agent
-- Handle multi-turn conversations
-- Stream responses (optional)
+- **Tool-Level Error Handling**: Each tool (blog search, web search, analysis) has try-catch blocks with graceful degradation. If Pinecone search fails, the agent falls back to web search. If Tavily rate limit is hit, it uses cached results or alternative sources.
 
-**Success Criteria:**
-- [ ] Intent classification accuracy >90%
-- [ ] All 3 agents functional
-- [ ] Supervisor routes correctly
-- [ ] LangGraph workflows operational
-- [ ] Pinecone vector search working
+- **Agent Loop Error Recovery**: The multi-step reasoning loop includes error recovery mechanisms. If a tool call fails, the agent logs the error, attempts alternative approaches (e.g., query refinement), and continues execution rather than failing completely.
+
+- **API Error Handling**: FastAPI endpoints use proper exception handling with structured error responses. Network timeouts, rate limits, and service unavailability are caught and return user-friendly error messages.
+
+- **Retry Logic**: Critical operations (Pinecone queries, LLM calls) implement exponential backoff retry logic with configurable max attempts. Transient failures are automatically retried.
+
+- **Circuit Breaker Pattern**: For external services (Tavily, Pinecone), circuit breakers prevent cascading failures. After consecutive failures, the service is temporarily disabled and fallback mechanisms activate.
+
+- **Error Logging**: All errors are logged with context (query, session ID, tool name, error type) for debugging. Structured logging enables error pattern analysis and proactive issue detection.
+
+### 6. Observability & Monitoring
+
+The agent leverages LangSmith (primary) and Langfuse (backup) for comprehensive observability across the entire agent lifecycle:
+
+- **LangSmith Integration (Primary)**:
+  - **Trace Tracking**: Every agent execution is traced with full context—input queries, tool calls, LLM interactions, and final responses. Traces include timing, token usage, and cost metrics.
+  - **Tool Call Monitoring**: Each tool invocation (blog search, web search, synthesis) is logged with inputs, outputs, latency, and success/failure status.
+  - **LLM Call Tracking**: All Groq API calls are tracked with prompts, responses, token counts, and latency. This enables prompt optimization and cost analysis.
+  - **Performance Metrics**: Response times, token usage per query, and cost per interaction are automatically collected and visualized in LangSmith dashboard.
+  - **Error Tracking**: Failed operations are automatically captured with stack traces, enabling rapid debugging and issue resolution.
+
+- **Langfuse Integration (Backup)**:
+  - **Alternative Observability**: Langfuse serves as a backup observability platform, ensuring redundancy if LangSmith is unavailable.
+  - **Feature Parity**: Mirrors LangSmith's capabilities—traces, metrics, and error tracking—providing continuity of monitoring.
+  - **Cost Tracking**: Detailed cost analysis per model, per query, and per user session for budget management.
+
+- **Custom Metrics & Logging**:
+  - **Structured Logging**: All agent operations use structured logging (JSON format) with consistent fields: timestamp, level, component, session_id, query, and metadata.
+  - **Performance Monitoring**: Key metrics tracked include: query latency (P50, P95, P99), tool execution time, LLM response time, cache hit rate, and error rate.
+  - **Business Metrics**: Track user engagement (queries per session), answer quality (user feedback scores), and agent effectiveness (successful tool chains vs. failures).
+
+- **Alerting & Notifications**:
+  - **Error Alerts**: Automatic alerts for error rate spikes, service failures, or unusual error patterns.
+  - **Performance Alerts**: Notifications when response times exceed thresholds or token usage spikes unexpectedly.
+  - **Health Checks**: Regular health check endpoints monitor service availability and dependency status (Pinecone, Zep, Redis).
+
+This observability stack enables real-time monitoring, rapid debugging, performance optimization, and data-driven improvements to the agent's capabilities.
 
 ---
 
-### Phase 3: Observability & Evaluation (Week 4)
+## 🚀 Implementation Plan
 
-**Goal:** Add production monitoring and evaluation metrics
+### Deliverables
 
-**Components to Build:**
+- **Working Prototype**: Implement in a GitHub repo (e.g., using LangGraph for workflows, Pinecone for RAG, Groq LLM). Start with blog ingestion (RSS feeds from 8-10 sources like HubSpot/Moz), add agent logic in Python, and deploy via Colab for initial testing/demo.
+- **FastAPI Backend**: Mandatory—serve via FastAPI on a serverless host (e.g., Render/Vercel). Expose routes like POST /run-agent (input: query; output: streamed response with insights) and POST /ingest-blogs for data refresh. Build atop existing structures, adding endpoints without removing core logic.
+- **Technical Write-Up (400-500 Words)**: Cover architecture (LangGraph for agent flows, RAG via Pinecone, LangChain for tools/LLMs); challenges (e.g., handling RSS inconsistencies—solved via robust parsing with BeautifulSoup); potential improvements (e.g., scale to more blogs, integrate real-time webhooks for freshness).
 
-#### 1. LangSmith Tracing
-**File:** `src/observability/tracing.py`
-- Configure LangSmith client
-- Add tracing decorators
-- Custom run tracking
-- Metadata logging
+### Implementation Phases
 
-#### 2. Evaluation Metrics
-**File:** `src/evaluation/metrics.py`
-- Intent classification accuracy
-- Task success rate
-- Relevance scoring (LLM-as-judge)
-- Hallucination detection
-- Latency tracking (P95 <10s)
+**Phase 1: Blog Ingestion System** ✅ IN PROGRESS
+- RSS feed parser (feedparser library)
+- Content extractor (readability-lxml)
+- Chunking strategy (by section/paragraph)
+- Pinecone upsert (via API)
+- Target: 8-10 marketing blogs (HubSpot, Moz, Content Marketing Institute, etc.)
 
-#### 3. Feedback Loops
-- User feedback collection
-- Automated evaluation runs
-- Performance monitoring
-- Error tracking
+**Phase 2: Agentic RAG Implementation** 🚧 NEXT
+- LangGraph workflow for multi-step reasoning
+- Tool orchestration (blog search, web search, analysis)
+- Query refinement logic
+- Multi-source synthesis
 
-**Success Criteria:**
-- [ ] LangSmith traces all agent calls
-- [ ] Evaluation metrics computed
-- [ ] Feedback loop operational
-- [ ] Performance dashboard available
+**Phase 3: Knowledge Graph Enhancement** 📋 PLANNED
+- Entity extraction from blog content
+- Neo4j relationship mapping
+- Graph-based retrieval integration
+- Entity-linked query answering
 
----
-
-### Phase 4: Frontend & Deployment (Weeks 5-6)
-
-**Goal:** Deploy production system with user interface
-
-**Components to Build:**
-
-#### 1. Frontend Dashboard
-**Tech:** React/Vue
-- Chat interface for queries
-- Campaign performance visualizations
-- Agent activity monitoring
-- WebSocket streaming (optional)
-
-#### 2. Production Deployment
-**Platform:** Render
-- Deploy FastAPI backend
-- Configure Redis service
-- Set up Neo4j AuraDB
-- Environment variable management
+**Phase 4: Error Handling & Observability** 🚧 IN PROGRESS
+- Comprehensive error handling at all layers
+- LangSmith integration for trace tracking
+- Langfuse backup observability
+- Structured logging and metrics
+- Retry logic and circuit breakers
 - Health check endpoints
 
-#### 3. Integration with Zocket Products
-- Creative Studio API integration
-- Snoop AI data pipeline
-- Meta/Google Ads API connections
-- Real-time data sync
-
-**Success Criteria:**
-- [ ] Frontend deployed and accessible
-- [ ] Backend deployed on Render
-- [ ] All services connected
-- [ ] Integration tests passing
-- [ ] Uptime >99%
-
----
-
-## 🎯 Project Goals
-
-### Business Value
-1. **Reduce Analysis Time** - Automate campaign performance analysis
-2. **Improve ROAS** - Data-driven creative optimization
-3. **Competitive Intelligence** - Real-time market insights
-4. **Scale Operations** - Handle growing campaign volume
-
-### Technical Excellence
-1. **Production-Ready** - Error handling, monitoring, logging
-2. **Scalable Architecture** - Modular, async, cacheable
-3. **Observable** - Full tracing and metrics
-4. **Maintainable** - Clean code, tested, documented
-
-### Innovation
-1. **Graph RAG** - Structured reasoning over campaign data
-2. **Agentic RAG** - Dynamic information synthesis
-3. **Multi-Agent System** - Specialized agents for complex tasks
-4. **Self-Correction** - Agents verify and improve outputs
+**Phase 5: Evaluation & Improvement** 📋 PLANNED
+- Benchmark dataset creation (50-100 queries)
+- Automated evaluation metrics
+- Feedback loop implementation
+- Pattern recognition system
 
 ---
 
 ## 📊 Success Metrics
 
-### Phase 1 (Complete)
-- ✅ 9 API endpoints operational
-- ✅ Neo4j stores campaign hierarchy
-- ✅ Memory system functional
-- ✅ All tests passing
-
-### Phase 2 (Target)
-- Intent classification: >90% accuracy
-- Task success rate: >85%
-- Agent response time: <5s average
-- All 3 agents operational
-
-### Phase 3 (Target)
-- Relevance score: >4/5
-- Hallucination rate: <5%
-- P95 latency: <10s
-- LangSmith traces: 100% coverage
-
-### Phase 4 (Target)
-- System uptime: >99%
-- Frontend load time: <2s
-- API response time: <1s (P95)
-- User satisfaction: >4/5
+- **Relevance Score**: BERTScore > 0.85
+- **Hallucination Rate**: <5% (manual review)
+- **F1 Score for Extraction**: > 0.8
+- **ROUGE Scores**: ROUGE-1/2/L > 0.7
+- **Response Time**: <10s for complex queries
+- **Multi-Step Reasoning**: 2-4 tool calls per query
+- **Citation Accuracy**: 100% source attribution
 
 ---
 
 ## 🔗 Integration Points
 
-### Zocket Products
-- **Creative Studio** - Generate ad creatives based on insights
-- **Snoop AI** - Leverage existing competitor intelligence
-- **Ad Platforms** - Meta/Google Ads API for real-time data
-
-### External Services
-- **Tavily** - Web search and research
-- **Groq** - Fast LLM inference (Llama 3, Mixtral)
-- **LangSmith** - Tracing and observability
-- **Neo4j AuraDB** - Managed graph database
-- **Pinecone** - Managed vector database
-- **Zep** - Managed memory service
+- **Pinecone** - Vector database for marketing blog search (primary RAG)
+- **Neo4j** - Knowledge graph for entity relationships (Graph RAG)
+- **Groq** - LLM for agent reasoning (Llama 3.3 70B Versatile)
+- **Zep** - Conversation memory and adaptive behavior
+- **Tavily** - Real-time web search (supplementary)
+- **LangGraph** - Workflow orchestration for multi-step reasoning
+- **LangSmith** - Primary observability platform (trace tracking, metrics, error monitoring)
+- **Langfuse** - Backup observability platform (redundancy and cost tracking)
 
 ---
 
-## 🚀 Getting Started
-
-### Quick Setup
-```bash
-# 1. Clone and setup
-git clone <repo>
-cd Zocket-Marketing-Cortex
-python -m venv .venv
-source .venv/bin/activate
-
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3. Configure environment
-cp env.example .env
-# Add your API keys to .env
-
-# 4. Start services
-docker-compose up -d
-
-# 5. Load sample data
-python scripts/seed_data.py
-
-# 6. Run application
-uvicorn src.main:app --reload
-
-# 7. Visit http://localhost:8070/docs
-```
-
-### Development Workflow
-1. Make changes to code
-2. Run tests: `pytest -v`
-3. Check health: `curl http://localhost:8070/api/v1/health`
-4. Test endpoints via Swagger UI
-5. Commit and push
-
----
-
-## 📁 Project Structure
+## 📁 Key Files
 
 ```
-Zocket-Marketing-Cortex/
-├── src/
-│   ├── agents/          # Phase 2: Agent implementations
-│   ├── api/             # ✅ API routes and models
-│   ├── core/            # ✅ Memory, cache, config
-│   ├── knowledge/       # ✅ Graph + Phase 2: Vector
-│   ├── observability/   # Phase 3: Tracing
-│   └── evaluation/      # Phase 3: Metrics
-├── tests/               # ✅ Test suite
-├── scripts/             # ✅ Utilities
-├── docs/                # Documentation
-├── requirements.txt     # ✅ Dependencies
-├── docker-compose.yml   # ✅ Infrastructure
-└── README.md            # ✅ Overview
+src/
+├── agents/
+│   └── marketing_strategy_advisor.py  # Main agent with LangGraph
+├── knowledge/
+│   ├── vector_store.py                 # Pinecone RAG
+│   └── graph_schema.py                 # Neo4j knowledge graph
+├── integrations/
+│   ├── blog_ingestion.py                # RSS feed parser
+│   └── tavily_client.py                 # Web search
+├── observability/
+│   ├── langsmith_config.py              # LangSmith setup
+│   ├── langfuse_config.py               # Langfuse setup
+│   └── logging_config.py                # Structured logging
+├── evaluation/
+│   └── metrics.py                       # Evaluation suite
+└── api/
+    └── routes.py                        # FastAPI endpoints
 ```
 
 ---
 
-## 🎓 Key Learnings
-
-### What Makes This Strong
-1. **Modular Architecture** - Easy to extend and maintain
-2. **Production Patterns** - Error handling, logging, monitoring
-3. **Test Coverage** - Comprehensive test suite
-4. **Clear Documentation** - Easy onboarding
-5. **Scalable Design** - Async, cached, distributed
-
-### Best Practices Applied
-- Async/await throughout
-- Type hints everywhere
-- Pydantic validation
-- Environment-based config
-- Health checks
-- Graceful shutdown
-- Connection pooling
-
----
-
-**Status:** Phase 1 Complete ✅ | Phase 2 In Progress 🔄  
-**Timeline:** 4-6 weeks total  
-**Next:** Build Performance Analyst Agent
+**Status:** Phase 1 🚧 | Phase 2 📋 | Phase 4 🚧 | Next: Implement error handling and LangSmith observability

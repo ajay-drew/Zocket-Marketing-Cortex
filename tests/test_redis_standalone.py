@@ -1,11 +1,13 @@
 """
 Standalone Redis test - can run without pytest
 """
+import pytest
 import asyncio
 import redis.asyncio as redis
 from src.config import settings
 
 
+@pytest.mark.asyncio
 async def test_redis_operations():
     """Test Redis with various operations"""
     print("\n" + "="*60)

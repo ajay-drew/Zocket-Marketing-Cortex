@@ -66,22 +66,22 @@ python scripts/seed_data.py
 uvicorn src.main:app --reload
 ```
 
-The API will be available at `http://localhost:8070`
+The API will be available at `http://localhost:5469`
 
 ## 📚 API Documentation
 
 Once running, visit:
-- **Interactive API Docs**: http://localhost:8070/docs
-- **Alternative Docs**: http://localhost:8070/redoc
+- **Interactive API Docs**: http://localhost:5469/docs
+- **Alternative Docs**: http://localhost:5469/redoc
 
 ### Key Endpoints
 
 - `GET /` - Root endpoint with system info
-- `GET /api/v1/health` - Health check for all services
-- `POST /api/v1/run-agent` - Main agent orchestration endpoint
-- `POST /api/v1/campaigns` - Create campaign in knowledge graph
-- `GET /api/v1/campaigns/{id}` - Get campaign hierarchy
-- `GET /api/v1/high-performers` - Query high-performing creatives
+- `GET /api/health` - Health check for all services
+- `POST /api/run-agent` - Main agent orchestration endpoint
+- `POST /api/campaigns` - Create campaign in knowledge graph
+- `GET /api/campaigns/{id}` - Get campaign hierarchy
+- `GET /api/high-performers` - Query high-performing creatives
 
 ## 🏗️ Architecture
 
@@ -113,17 +113,70 @@ Once running, visit:
 
 ## 🧪 Testing
 
-Run the test suite:
+### Test Structure
+
+The project includes comprehensive test coverage:
+
+- **Unit Tests**: Test individual components in isolation
+- **Integration Tests**: Test component interactions
+- **End-to-End Tests**: Test complete user workflows
+- **Pipeline Tests**: CI/CD automated testing
+
+### Running Tests
+
+**Quick test run:**
 ```bash
-# All tests
-pytest
+# Run all tests
+pytest tests/ -v
 
-# With coverage
-pytest --cov=src --cov-report=html
-
-# Specific test file
-pytest tests/test_api.py -v
+# Run specific test types
+pytest tests/ -m unit -v          # Unit tests only
+pytest tests/ -m integration -v    # Integration tests only
+pytest tests/ -m e2e -v            # E2E tests only
 ```
+
+**With coverage:**
+```bash
+pytest tests/ --cov=src --cov-report=html --cov-report=term-missing
+# View coverage report: open htmlcov/index.html
+```
+
+**Using test scripts:**
+```bash
+# Linux/Mac
+./scripts/run_tests.sh
+./scripts/run_tests.sh --e2e        # Include E2E tests
+./scripts/run_tests.sh --coverage   # With coverage
+
+# Windows
+scripts\run_tests.bat
+scripts\run_tests.bat --e2e
+scripts\run_tests.bat --coverage
+```
+
+### Test Files
+
+- `tests/test_api_blog_endpoints.py` - Blog API endpoint tests
+- `tests/test_blog_ingestion.py` - Blog ingestion unit tests
+- `tests/test_vector_store_blog.py` - Vector store blog methods tests
+- `tests/test_research_assistant_blog_tool.py` - Agent blog tool tests
+- `tests/test_integration.py` - Integration tests
+- `tests/test_e2e.py` - End-to-end workflow tests
+- `tests/test_frontend_components.py` - Frontend component structure tests
+
+### CI/CD Pipeline
+
+The project includes GitHub Actions CI pipeline (`.github/workflows/ci.yml`) that:
+- Runs backend tests with Neo4j service
+- Runs frontend linting and TypeScript checks
+- Runs integration tests
+- Generates coverage reports
+
+### Test Coverage Goals
+
+- Unit tests: >80% coverage
+- Integration tests: All critical paths
+- E2E tests: All major user workflows
 
 ## 📊 Phase 1 Status (Current)
 
@@ -157,7 +210,7 @@ pytest tests/test_api.py -v
 
 - [PROJECT_REFERENCE.md](PROJECT_REFERENCE.md) - Comprehensive project documentation (742 lines)
 - [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - Quick reference guide (250 lines)
-- [API Documentation](http://localhost:8070/docs) - Interactive API docs
+- [API Documentation](http://localhost:5469/docs) - Interactive API docs
 
 ## 🛠️ Technology Stack
 
