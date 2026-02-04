@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     debug: bool = True
     log_level: str = "INFO"
+    port: int = 8070
     
     # Groq
     groq_api_key: str
@@ -42,11 +43,13 @@ class Settings(BaseSettings):
     zep_api_url: str = "https://api.getzep.com"
     zep_api_key: str
     
-    # Redis
-    redis_url: str = "redis://localhost:6379/0"
+    # Redis (Upstash Serverless)
+    redis_url: str = "rediss://default:your_password@your-endpoint.upstash.io:6379"
     
     # Tavily
     tavily_api_key: str
+    tavily_monthly_limit: int = 1000
+    tavily_enable_fallback: bool = True
     
     class Config:
         env_file = ".env"

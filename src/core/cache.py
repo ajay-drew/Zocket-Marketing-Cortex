@@ -1,7 +1,7 @@
 """
 Redis caching layer for performance optimization
 """
-import redis.asyncio as redis
+import redis
 from typing import Optional, Any
 import json
 import logging
@@ -18,27 +18,29 @@ class CacheManager:
         self.redis_client: Optional[redis.Redis] = None
         self.default_ttl = 3600  # 1 hour default TTL
     
-    async def connect(self):
-        """Establish Redis connection"""
+    def connect(self):
+        """Establish Redis connection (Upstash serverless)"""
         try:
-            self.redis_client = await redis.from_url(
+            # Upstash Redis - synchronous client
+            self.redis_client = redis.Redis.from_url(
                 settings.redis_url,
-                encoding="utf-8",
                 decode_responses=True
             )
-            await self.redis_client.ping()
-            logger.info("Redis cache connected successfully")
+            # Test connection
+            self.redis_client.ping()
+            logger.info("Upstash Redis connected successfully")
         except Exception as e:
-            logger.error(f"Redis connection failed: {e}")
+            logger.error(f"Upstash Redis connection failed: {e}")
+            logger.error(f"Make sure REDIS_URL is in format: rediss://default:PASSWORD@ENDPOINT.upstash.io:6379")
             self.redis_client = None
     
-    async def disconnect(self):
+    def disconnect(self):
         """Close Redis connection"""
         if self.redis_client:
-            await self.redis_client.close()
-            logger.info("Redis cache disconnected")
+            self.redis_client.close()
+            logger.info("Upstash Redis disconnected")
     
-    async def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Optional[Any]:
         """
         Retrieve value from cache
         
@@ -52,7 +54,7 @@ class CacheManager:
             return None
         
         try:
-            value = await self.redis_client.get(key)
+            value = self.redis_client.get(key)
             if value:
                 logger.debug(f"Cache hit: {key}")
                 return json.loads(value)
@@ -62,7 +64,7 @@ class CacheManager:
             logger.error(f"Cache get error: {e}")
             return None
     
-    async def set(
+    def set(
         self,
         key: str,
         value: Any,
@@ -84,7 +86,7 @@ class CacheManager:
         
         try:
             serialized = json.dumps(value)
-            await self.redis_client.setex(
+            self.redis_client.setex(
                 key,
                 ttl or self.default_ttl,
                 serialized
@@ -95,7 +97,7 @@ class CacheManager:
             logger.error(f"Cache set error: {e}")
             return False
     
-    async def delete(self, key: str) -> bool:
+    def delete(self, key: str) -> bool:
         """
         Delete value from cache
         
@@ -109,14 +111,14 @@ class CacheManager:
             return False
         
         try:
-            await self.redis_client.delete(key)
+            self.redis_client.delete(key)
             logger.debug(f"Deleted from cache: {key}")
             return True
         except Exception as e:
             logger.error(f"Cache delete error: {e}")
             return False
     
-    async def clear_pattern(self, pattern: str) -> int:
+    def clear_pattern(self, pattern: str) -> int:
         """
         Clear all keys matching a pattern
         
@@ -131,11 +133,11 @@ class CacheManager:
         
         try:
             keys = []
-            async for key in self.redis_client.scan_iter(match=pattern):
+            for key in self.redis_client.scan_iter(match=pattern):
                 keys.append(key)
             
             if keys:
-                deleted = await self.redis_client.delete(*keys)
+                deleted = self.redis_client.delete(*keys)
                 logger.info(f"Cleared {deleted} keys matching pattern: {pattern}")
                 return deleted
             return 0

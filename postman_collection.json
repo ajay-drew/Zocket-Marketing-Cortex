@@ -1,0 +1,337 @@
+{
+  "info": {
+    "name": "Marketing Cortex API",
+    "description": "Complete API collection for Marketing Cortex multi-agent system",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8070/api/v1/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8070",
+              "path": ["api", "v1", "health"]
+            }
+          }
+        },
+        {
+          "name": "Root",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8070/",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8070",
+              "path": [""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Agent Operations",
+      "item": [
+        {
+          "name": "Run Agent Query",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"What are the top performing campaigns?\",\n  \"session_id\": \"user-123\",\n  \"context\": {}\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8070/api/v1/run-agent",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8070",
+              "path": ["api", "v1", "run-agent"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Campaign Management",
+      "item": [
+        {
+          "name": "Create Campaign",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"campaign_id\": \"camp_001\",\n  \"name\": \"Summer Sale 2026\",\n  \"budget\": 10000,\n  \"status\": \"active\",\n  \"start_date\": \"2026-06-01\",\n  \"end_date\": \"2026-08-31\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8070/api/v1/campaigns",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8070",
+              "path": ["api", "v1", "campaigns"]
+            }
+          }
+        },
+        {
+          "name": "Get Campaign",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8070/api/v1/campaigns/camp_001",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8070",
+              "path": ["api", "v1", "campaigns", "camp_001"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "AdSet Management",
+      "item": [
+        {
+          "name": "Create AdSet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"adset_id\": \"adset_001\",\n  \"campaign_id\": \"camp_001\",\n  \"name\": \"Fitness Products - 25-35\",\n  \"targeting\": {\n    \"age_range\": \"25-35\",\n    \"interests\": [\"fitness\", \"health\"],\n    \"locations\": [\"US\", \"CA\"]\n  },\n  \"budget\": 5000,\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8070/api/v1/adsets",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8070",
+              "path": ["api", "v1", "adsets"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Creative Management",
+      "item": [
+        {
+          "name": "Create Creative",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"creative_id\": \"creative_001\",\n  \"adset_id\": \"adset_001\",\n  \"name\": \"Summer Sale Banner\",\n  \"format\": \"image\",\n  \"copy\": \"Get fit this summer! 50% off all fitness gear\",\n  \"media_url\": \"https://example.com/banner.jpg\",\n  \"cta\": \"Shop Now\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8070/api/v1/creatives",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8070",
+              "path": ["api", "v1", "creatives"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Performance Tracking",
+      "item": [
+        {
+          "name": "Add Performance Data",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"creative_id\": \"creative_001\",\n  \"date\": \"2026-02-04\",\n  \"impressions\": 10000,\n  \"clicks\": 500,\n  \"conversions\": 50,\n  \"spend\": 250,\n  \"revenue\": 1000\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8070/api/v1/performance",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8070",
+              "path": ["api", "v1", "performance"]
+            }
+          }
+        },
+        {
+          "name": "Query High Performers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8070/api/v1/high-performers?min_roas=2.0&limit=10",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8070",
+              "path": ["api", "v1", "high-performers"],
+              "query": [
+                {
+                  "key": "min_roas",
+                  "value": "2.0"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tavily Search & Rate Limiting",
+      "item": [
+        {
+          "name": "Get Tavily Quota Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8070/api/v1/tavily/quota",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8070",
+              "path": ["api", "v1", "tavily", "quota"]
+            }
+          }
+        },
+        {
+          "name": "Tavily Search - General",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8070/api/v1/tavily/search?query=latest marketing trends 2026&search_type=general&max_results=5",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8070",
+              "path": ["api", "v1", "tavily", "search"],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "latest marketing trends 2026"
+                },
+                {
+                  "key": "search_type",
+                  "value": "general"
+                },
+                {
+                  "key": "max_results",
+                  "value": "5"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Tavily Search - Competitor Analysis",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8070/api/v1/tavily/search?query=Nike advertising strategy&search_type=competitor&max_results=5",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8070",
+              "path": ["api", "v1", "tavily", "search"],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "Nike advertising strategy"
+                },
+                {
+                  "key": "search_type",
+                  "value": "competitor"
+                },
+                {
+                  "key": "max_results",
+                  "value": "5"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Tavily Search - News",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8070/api/v1/tavily/search?query=social media advertising news&search_type=news&max_results=5",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8070",
+              "path": ["api", "v1", "tavily", "search"],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "social media advertising news"
+                },
+                {
+                  "key": "search_type",
+                  "value": "news"
+                },
+                {
+                  "key": "max_results",
+                  "value": "5"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Clear Tavily Cache",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8070/api/v1/tavily/cache",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8070",
+              "path": ["api", "v1", "tavily", "cache"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

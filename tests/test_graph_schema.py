@@ -3,6 +3,7 @@ Tests for Neo4j graph schema operations
 """
 import pytest
 from src.knowledge.graph_schema import GraphSchema
+from src.config import settings
 
 
 @pytest.fixture
@@ -10,7 +11,17 @@ async def graph():
     """Create graph schema instance"""
     schema = GraphSchema()
     await schema.initialize_schema()
+    
+    # Clean up test data before tests
+    async with schema.driver.session(database=settings.neo4j_database) as session:
+        await session.run("MATCH (n) WHERE n.id STARTS WITH 'test_' DETACH DELETE n")
+    
     yield schema
+    
+    # Clean up test data after tests
+    async with schema.driver.session(database=settings.neo4j_database) as session:
+        await session.run("MATCH (n) WHERE n.id STARTS WITH 'test_' DETACH DELETE n")
+    
     await schema.close()
 
 

@@ -303,13 +303,13 @@ python scripts/seed_data.py
 # 6. Run application
 uvicorn src.main:app --reload
 
-# 7. Visit http://localhost:8000/docs
+# 7. Visit http://localhost:8070/docs
 ```
 
 ### Development Workflow
 1. Make changes to code
 2. Run tests: `pytest -v`
-3. Check health: `curl http://localhost:8000/api/v1/health`
+3. Check health: `curl http://localhost:8070/api/v1/health`
 4. Test endpoints via Swagger UI
 5. Commit and push
 

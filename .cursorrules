@@ -237,3 +237,138 @@ src/
 **Lesson Learned:** DO NOT create excessive MD files. Keep documentation minimal and practical. README.md is sufficient.
 
 **Ready for Phase 2:** All infrastructure in place, essential documentation complete, all tests passing.
+
+---
+
+### Session 4 - February 4, 2026 (Tavily Rate Limiting Implementation)
+**User Request:** Handle Tavily's 1000 requests/month limit with specific logic
+
+**Execution:**
+1. **Created Tavily Client with Rate Limiting** (`src/integrations/tavily_client.py`):
+   - **Aggressive Caching:** 7 days for research, 1 hour for news, 1 day for competitor analysis
+   - **Request Counting:** Monthly counter with automatic reset
+   - **Quota Monitoring:** Warnings at 50%, 75%, 90%, 95% usage thresholds
+   - **Cache-First Strategy:** Always check cache before API call
+   - **Query Deduplication:** Case-insensitive query hashing
+   - **Fallback Mode:** Automatic fallback when quota exceeded
+   - **Production-Ready:** Proper error handling and logging
+
+2. **Key Features:**
+   - ✅ Monthly request counter stored in Redis
+   - ✅ Automatic counter reset on 1st of each month
+   - ✅ Cache keys based on query hash + search type
+   - ✅ Different TTLs for different search types
+   - ✅ Quota status endpoint for monitoring
+   - ✅ Manual cache clearing capability
+   - ✅ Fallback search method (for DuckDuckGo integration in Phase 2)
+
+3. **API Endpoints Added** (`src/api/routes.py`):
+   - `GET /api/v1/tavily/quota` - Check current quota usage
+   - `POST /api/v1/tavily/search` - Search with rate limiting
+   - `DELETE /api/v1/tavily/cache` - Clear cache manually
+
+4. **Configuration Updates:**
+   - Added `TAVILY_MONTHLY_LIMIT=1000` to env.example
+   - Added `TAVILY_ENABLE_FALLBACK=true` to env.example
+   - Updated `src/config.py` with Tavily settings
+
+5. **Testing:**
+   - Created `tests/test_tavily_client.py` with 9 test cases
+   - Tests for caching, quota tracking, fallback mode
+   - Tests for cache key generation and TTL selection
+
+6. **Rate Limiting Strategy:**
+   ```
+   Request Flow:
+   1. Check cache first (7-day TTL for research)
+   2. If cache miss, check monthly quota
+   3. If quota available, make API call
+   4. Increment counter and cache result
+   5. If quota exceeded, use fallback search
+   ```
+
+7. **Quota Warnings:**
+   - 500 requests (50%): INFO log
+   - 750 requests (75%): WARNING log
+   - 900 requests (90%): ERROR log
+   - 950 requests (95%): CRITICAL log + auto-fallback
+
+**Files Created:**
+- `src/integrations/__init__.py`
+- `src/integrations/tavily_client.py` (400+ lines)
+- `tests/test_tavily_client.py` (130+ lines)
+
+**Files Modified:**
+- `src/api/routes.py` - Added 3 Tavily endpoints
+- `src/config.py` - Added Tavily config
+- `env.example` - Added Tavily rate limit settings
+
+**Key Insight:** With 7-day caching for research queries, the actual API usage will be minimal. Most queries will hit cache, keeping monthly usage well under 1000 requests.
+
+**Lesson Learned:** User correctly reminded me NOT to create unnecessary MD files. All documentation should be in code comments and the .cursorrules file.
+
+---
+
+### Session 5 - February 4, 2026 (Port Change & Upstash Redis Migration)
+**User Request:** Change backend port to 8070 and migrate to Upstash Redis serverless
+
+**Execution:**
+1. **Port Configuration Changes:**
+   - Updated `src/main.py` to use `settings.port` (8070)
+   - Added `port: int = 8070` to `src/config.py`
+   - Added `PORT=8070` to `env.example`
+   - Updated `run_project.bat` with port 8070 references
+   - Updated all documentation (README.md, NEXT_STEPS.md, PROJECT_REFERENCE.md)
+   - Updated all 13 endpoints in `postman_collection.json` to port 8070
+
+2. **Upstash Redis Migration:**
+   - **Updated `env.example`:** Changed Redis URL format to Upstash (`rediss://` with TLS)
+   - **Updated `src/config.py`:** Default Redis URL now points to Upstash format
+   - **Updated `src/core/cache.py`:** 
+     - Added SSL/TLS support for Upstash (`ssl_cert_reqs=None`)
+     - Updated connection messages to reference "Upstash Redis"
+     - Added helpful error message with correct URL format
+   - **Updated `docker-compose.yml`:** 
+     - Removed Redis container (no longer needed)
+     - Added comment about Upstash serverless
+     - Removed redis_data volume
+     - Kept Neo4j for local development
+   - **Updated `run_project.bat`:** 
+     - Changed messages to reflect "Neo4j only" for Docker
+     - Updated Redis test messages to reference Upstash
+   - **Updated `README.md`:** Prerequisites now mention Upstash Redis
+   - **Updated `render.yaml`:** Removed Redis service, added note about Upstash
+
+3. **Benefits of Upstash Redis:**
+   - ✅ Serverless - no infrastructure management
+   - ✅ Auto-scaling based on usage
+   - ✅ Built-in TLS/SSL security
+   - ✅ Pay-per-request pricing (cost-effective)
+   - ✅ Global edge network (low latency)
+   - ✅ No Docker container needed locally
+
+4. **Configuration Format:**
+   ```
+   Old (Local): redis://localhost:6379/0
+   New (Upstash): rediss://default:PASSWORD@ENDPOINT.upstash.io:6379
+   ```
+
+**Files Modified:**
+- `src/main.py` - Port configuration
+- `src/config.py` - Port setting + Upstash Redis URL
+- `src/core/cache.py` - Upstash connection handling
+- `env.example` - Port + Upstash Redis URL with instructions
+- `docker-compose.yml` - Removed Redis container
+- `render.yaml` - Removed Redis service
+- `run_project.bat` - Updated all port and Redis references
+- `README.md` - Updated URLs and prerequisites
+- `NEXT_STEPS.md` - Updated port and Redis references
+- `PROJECT_REFERENCE.md` - Updated port references
+- `postman_collection.json` - All 13 endpoints updated to port 8070
+
+**New Application URLs:**
+- API: `http://localhost:8070`
+- Docs: `http://localhost:8070/docs`
+- Health: `http://localhost:8070/api/v1/health`
+
+**Migration Status:** ✅ COMPLETE - Backend now runs on port 8070 with Upstash Redis serverless

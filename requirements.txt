@@ -1,42 +1,42 @@
 # Core Framework
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-pydantic==2.5.3
-pydantic-settings==2.1.0
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
 
 # LangChain & LangGraph
-langchain==0.1.4
-langchain-groq==0.0.1
-langchain-community==0.0.16
-langgraph==0.0.20
-langsmith==0.0.83
+langchain
+langchain-groq
+langchain-community
+langgraph
+langsmith
 
 # Vector & Graph Databases
-neo4j==5.16.0
-pinecone-client==3.0.2
-chromadb==0.4.22
+neo4j
+pinecone
+chromadb
 
 # Memory & Caching
-zep-python==2.0.0rc5
-redis==5.0.1
+zep-python
+redis
 
 # External APIs
-tavily-python==0.3.3
-httpx==0.26.0
+tavily-python
+httpx
 
 # Observability
-langfuse==2.6.3
+langfuse
 
 # Data Processing
-pandas==2.2.0
-numpy==1.26.3
+pandas
+numpy
 
 # Testing
-pytest==7.4.4
-pytest-asyncio==0.23.3
-pytest-cov==4.1.0
+pytest
+pytest-asyncio
+pytest-cov
 
 # Utilities
-python-dotenv==1.0.0
-python-multipart==0.0.6
-aiofiles==23.2.1
+python-dotenv
+python-multipart
+aiofiles

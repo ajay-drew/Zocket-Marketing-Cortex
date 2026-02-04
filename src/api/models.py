@@ -55,7 +55,7 @@ class CreativeCreate(BaseModel):
     creative_id: str
     adset_id: str
     name: str
-    copy: str
+    ad_copy: str = Field(..., description="The advertising copy text")
     image_url: Optional[str] = None
     metadata: Optional[Dict] = None
 

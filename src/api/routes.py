@@ -14,6 +14,7 @@ from src.api.models import (
 from src.knowledge.graph_schema import graph_schema
 from src.core.memory import memory_manager
 from src.core.cache import cache_manager
+from src.integrations.tavily_client import tavily_client
 from datetime import datetime
 import logging
 import uuid
@@ -47,15 +48,17 @@ async def health_check():
         logger.error(f"Neo4j health check failed: {e}")
         services["neo4j"] = "unhealthy"
     
-    # Check Redis
+    # Check Redis (synchronous)
     try:
         if cache_manager.redis_client:
-            await cache_manager.redis_client.ping()
+            result = cache_manager.redis_client.ping()
+            logger.debug(f"Redis ping result: {result}")
             services["redis"] = "healthy"
         else:
+            logger.warning("Redis client is None")
             services["redis"] = "not_connected"
     except Exception as e:
-        logger.error(f"Redis health check failed: {e}")
+        logger.error(f"Redis health check failed: {e}", exc_info=True)
         services["redis"] = "unhealthy"
     
     # Check Zep (basic check)
@@ -175,7 +178,7 @@ async def create_creative(creative: CreativeCreate):
             creative_id=creative.creative_id,
             adset_id=creative.adset_id,
             name=creative.name,
-            copy=creative.copy,
+            copy=creative.ad_copy,
             image_url=creative.image_url,
             metadata=creative.metadata
         )
@@ -243,6 +246,85 @@ async def get_high_performers(min_roas: float = 2.0, limit: int = 10):
         return {"results": results, "count": len(results)}
     except Exception as e:
         logger.error(f"Error querying high performers: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get("/tavily/quota")
+async def get_tavily_quota():
+    """
+    Get Tavily API quota status
+    
+    Returns:
+        Current usage statistics and quota information
+    """
+    try:
+        quota_status = await tavily_client.get_quota_status()
+        return quota_status
+    except Exception as e:
+        logger.error(f"Error getting Tavily quota: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post("/tavily/search")
+async def tavily_search(
+    query: str,
+    search_type: str = "general",
+    max_results: int = 5,
+    force_refresh: bool = False
+):
+    """
+    Search using Tavily API with rate limiting and caching
+    
+    Args:
+        query: Search query
+        search_type: Type of search (general, news, competitor, research)
+        max_results: Maximum number of results (default: 5)
+        force_refresh: Skip cache and force new API call
+        
+    Returns:
+        Search results with caching metadata
+    """
+    try:
+        # Use fallback-enabled search
+        results = await tavily_client.search_with_fallback(
+            query=query,
+            search_type=search_type,
+            max_results=max_results
+        )
+        return results
+    except Exception as e:
+        logger.error(f"Tavily search error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.delete("/tavily/cache")
+async def clear_tavily_cache(search_type: str = None):
+    """
+    Clear Tavily cache
+    
+    Args:
+        search_type: Specific search type to clear (optional)
+        
+    Returns:
+        Number of cache entries cleared
+    """
+    try:
+        cleared = await tavily_client.clear_cache(search_type)
+        return {
+            "cleared": cleared,
+            "search_type": search_type or "all"
+        }
+    except Exception as e:
+        logger.error(f"Error clearing Tavily cache: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)

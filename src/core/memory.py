@@ -2,8 +2,8 @@
 Memory management using Zep for conversation persistence
 """
 from typing import List, Dict, Optional
-from zep_python import ZepClient
-from zep_python.memory import Memory, Message, Session
+from zep_python.client import Zep
+from zep_python import Memory, Message, Session
 from src.config import settings
 import logging
 
@@ -15,13 +15,12 @@ class MemoryManager:
     
     def __init__(self):
         """Initialize Zep client"""
-        self.client = ZepClient(
-            api_url=settings.zep_api_url,
+        self.client = Zep(
             api_key=settings.zep_api_key
         )
         logger.info("Zep Memory Manager initialized")
     
-    async def create_session(self, session_id: str, user_id: Optional[str] = None) -> Session:
+    def create_session(self, session_id: str, user_id: Optional[str] = None) -> Session:
         """
         Create a new conversation session
         
@@ -37,14 +36,14 @@ class MemoryManager:
                 session_id=session_id,
                 user_id=user_id or "default_user"
             )
-            await self.client.memory.add_session(session)
+            self.client.memory.add_session(session)
             logger.info(f"Created session: {session_id}")
             return session
         except Exception as e:
             logger.error(f"Error creating session: {e}")
             raise
     
-    async def add_message(
+    def add_message(
         self,
         session_id: str,
         role: str,
@@ -66,13 +65,13 @@ class MemoryManager:
                 content=content,
                 metadata=metadata or {}
             )
-            await self.client.memory.add_memory(session_id, message)
+            self.client.memory.add(session_id, messages=[message])
             logger.debug(f"Added {role} message to session {session_id}")
         except Exception as e:
             logger.error(f"Error adding message: {e}")
             raise
     
-    async def get_memory(self, session_id: str) -> Optional[Memory]:
+    def get_memory(self, session_id: str) -> Optional[Memory]:
         """
         Retrieve conversation memory for a session
         
@@ -83,43 +82,43 @@ class MemoryManager:
             Memory object with conversation history
         """
         try:
-            memory = await self.client.memory.get_memory(session_id)
+            memory = self.client.memory.get(session_id)
             logger.debug(f"Retrieved memory for session {session_id}")
             return memory
         except Exception as e:
             logger.error(f"Error retrieving memory: {e}")
             return None
     
-    async def search_memory(
+    def search_sessions(
         self,
-        session_id: str,
         query: str,
+        user_id: Optional[str] = None,
         limit: int = 5
     ) -> List[Dict]:
         """
-        Search conversation history semantically
+        Search across sessions semantically
         
         Args:
-            session_id: Session identifier
             query: Search query
+            user_id: Optional user filter
             limit: Maximum number of results
             
         Returns:
-            List of relevant messages
+            List of relevant session results
         """
         try:
-            results = await self.client.memory.search_memory(
-                session_id=session_id,
-                query=query,
+            results = self.client.memory.search_sessions(
+                text=query,
+                user_id=user_id,
                 limit=limit
             )
-            logger.debug(f"Found {len(results)} relevant messages")
+            logger.debug(f"Found {len(results)} relevant sessions")
             return results
         except Exception as e:
-            logger.error(f"Error searching memory: {e}")
+            logger.error(f"Error searching sessions: {e}")
             return []
     
-    async def delete_session(self, session_id: str) -> None:
+    def delete_session(self, session_id: str) -> None:
         """
         Delete a conversation session
         
@@ -127,7 +126,7 @@ class MemoryManager:
             session_id: Session identifier
         """
         try:
-            await self.client.memory.delete_memory(session_id)
+            self.client.memory.delete(session_id)
             logger.info(f"Deleted session: {session_id}")
         except Exception as e:
             logger.error(f"Error deleting session: {e}")

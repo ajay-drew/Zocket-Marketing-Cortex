@@ -26,14 +26,11 @@ services:
       # - TAVILY_API_KEY
       # - REDIS_URL (from Redis service)
     
-  # Redis Cache
-  - type: redis
-    name: marketing-cortex-redis
-    region: oregon
-    plan: starter
-    maxmemoryPolicy: allkeys-lru
-    ipAllowList: []  # Configure as needed
+  # Note: Redis is now using Upstash serverless (external)
+  # Set REDIS_URL environment variable to your Upstash Redis URL
 
-# Note: Neo4j should be hosted on Neo4j AuraDB (external)
-# Pinecone is a managed service (external)
-# Zep is a managed service (external)
+# External Services (Configure via environment variables):
+# - Neo4j: Use Neo4j AuraDB (https://console.neo4j.io)
+# - Redis: Use Upstash Redis (https://console.upstash.com/redis)
+# - Pinecone: Use Pinecone cloud (https://app.pinecone.io)
+# - Zep: Use Zep cloud (https://app.getzep.com)

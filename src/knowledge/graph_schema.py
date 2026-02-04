@@ -4,6 +4,7 @@ Neo4j Knowledge Graph Schema for Marketing Entities
 from neo4j import AsyncGraphDatabase
 from typing import Dict, List, Optional
 import logging
+import json
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -103,7 +104,7 @@ class GraphSchema:
                 objective=objective,
                 budget=budget,
                 start_date=start_date,
-                metadata=metadata or {}
+                metadata=json.dumps(metadata or {})  # Serialize dict to JSON string
             )
             record = await result.single()
             logger.info(f"Created campaign: {campaign_id}")
@@ -152,9 +153,9 @@ class GraphSchema:
                 adset_id=adset_id,
                 campaign_id=campaign_id,
                 name=name,
-                targeting=targeting,
+                targeting=json.dumps(targeting),  # Serialize dict to JSON string
                 budget=budget,
-                metadata=metadata or {}
+                metadata=json.dumps(metadata or {})  # Serialize dict to JSON string
             )
             record = await result.single()
             logger.info(f"Created adset: {adset_id} under campaign: {campaign_id}")
@@ -205,7 +206,7 @@ class GraphSchema:
                 name=name,
                 copy=copy,
                 image_url=image_url,
-                metadata=metadata or {}
+                metadata=json.dumps(metadata or {})  # Serialize dict to JSON string
             )
             record = await result.single()
             logger.info(f"Created creative: {creative_id} under adset: {adset_id}")

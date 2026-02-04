@@ -33,9 +33,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to initialize Neo4j schema: {e}")
     
-    # Connect to Redis
+    # Connect to Redis (synchronous)
     try:
-        await cache_manager.connect()
+        cache_manager.connect()
         logger.info("Redis cache connected")
     except Exception as e:
         logger.error(f"Failed to connect to Redis: {e}")
@@ -54,9 +54,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Error closing Neo4j: {e}")
     
-    # Disconnect Redis
+    # Disconnect Redis (synchronous)
     try:
-        await cache_manager.disconnect()
+        cache_manager.disconnect()
         logger.info("Redis disconnected")
     except Exception as e:
         logger.error(f"Error disconnecting Redis: {e}")
@@ -102,6 +102,6 @@ if __name__ == "__main__":
     uvicorn.run(
         "src.main:app",
         host="0.0.0.0",
-        port=8000,
+        port=settings.port,
         reload=settings.debug
     )

@@ -20,9 +20,10 @@ Marketing Cortex (ZMC) is a sophisticated multi-agent AI system that orchestrate
 ### Prerequisites
 
 - Python 3.10+
-- Docker & Docker Compose
+- Docker & Docker Compose (for Neo4j only)
 - Neo4j AuraDB account (or local Neo4j)
-- API keys for: OpenAI, LangSmith, Pinecone, Zep, Tavily
+- Upstash Redis account (serverless)
+- API keys for: Groq, LangSmith, Pinecone, Zep, Tavily
 
 ### Installation
 
@@ -46,10 +47,11 @@ pip install -r requirements.txt
 4. **Set up environment variables**
 ```bash
 cp env.example .env
-# Edit .env with your API keys
+# Edit .env with your API keys and Upstash Redis URL
+# Get your Upstash Redis URL from: https://console.upstash.com/redis
 ```
 
-5. **Start infrastructure (Redis & Neo4j)**
+5. **Start infrastructure (Neo4j only - Redis is serverless)**
 ```bash
 docker-compose up -d
 ```
@@ -64,13 +66,13 @@ python scripts/seed_data.py
 uvicorn src.main:app --reload
 ```
 
-The API will be available at `http://localhost:8000`
+The API will be available at `http://localhost:8070`
 
 ## 📚 API Documentation
 
 Once running, visit:
-- **Interactive API Docs**: http://localhost:8000/docs
-- **Alternative Docs**: http://localhost:8000/redoc
+- **Interactive API Docs**: http://localhost:8070/docs
+- **Alternative Docs**: http://localhost:8070/redoc
 
 ### Key Endpoints
 
@@ -155,7 +157,7 @@ pytest tests/test_api.py -v
 
 - [PROJECT_REFERENCE.md](PROJECT_REFERENCE.md) - Comprehensive project documentation (742 lines)
 - [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - Quick reference guide (250 lines)
-- [API Documentation](http://localhost:8000/docs) - Interactive API docs
+- [API Documentation](http://localhost:8070/docs) - Interactive API docs
 
 ## 🛠️ Technology Stack
 

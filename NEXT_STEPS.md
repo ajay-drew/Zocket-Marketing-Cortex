@@ -57,8 +57,8 @@ PINECONE_INDEX_NAME=marketing-cortex
 ZEP_API_URL=https://api.getzep.com
 ZEP_API_KEY=...
 
-# Redis (Local or Cloud)
-REDIS_URL=redis://localhost:6379/0
+# Redis (Upstash Serverless)
+REDIS_URL=rediss://default:your_password@your-endpoint.upstash.io:6379
 
 # Tavily (Phase 2)
 TAVILY_API_KEY=...
@@ -83,7 +83,7 @@ python scripts/seed_data.py
 # 6. Run application
 uvicorn src.main:app --reload
 
-# 7. Visit http://localhost:8000/docs
+# 7. Visit http://localhost:8070/docs
 ```
 
 ---
@@ -198,7 +198,7 @@ src/
 
 ## 📞 Need Help?
 
-- Check API docs: http://localhost:8000/docs
+- Check API docs: http://localhost:8070/docs
 - Review code in `src/` directory
 - Test with sample data first
 - Use health check to verify services

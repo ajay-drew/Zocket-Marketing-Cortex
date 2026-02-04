@@ -1,21 +1,9 @@
 version: '3.8'
 
 services:
-  # Redis for caching
-  redis:
-    image: redis:7-alpine
-    container_name: marketing-cortex-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-
+  # Note: Redis is now using Upstash serverless (cloud-hosted)
+  # No local Redis container needed - update REDIS_URL in .env
+  
   # Neo4j for knowledge graph (local development)
   neo4j:
     image: neo4j:5.16.0
@@ -37,6 +25,5 @@ services:
       retries: 5
 
 volumes:
-  redis_data:
   neo4j_data:
   neo4j_logs:
