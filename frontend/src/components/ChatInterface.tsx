@@ -14,7 +14,7 @@ export const ChatInterface: React.FC = () => {
     return newId;
   });
 
-  const { message: streamingMessage, isStreaming, error, sendMessage, clearMessage } = useSSE();
+  const { message: streamingMessage, isStreaming, error, toolCalls, sendMessage, clearMessage } = useSSE();
 
   const handleSend = useCallback(
     (query: string) => {
@@ -41,6 +41,7 @@ export const ChatInterface: React.FC = () => {
         role: 'assistant',
         content: streamingMessage,
         timestamp: new Date(),
+        reasoning: toolCalls.length > 0 ? toolCalls : undefined, // Store reasoning steps
       };
       setMessages((prev) => {
         const updated = [...prev, assistantMessage];
@@ -78,23 +79,24 @@ export const ChatInterface: React.FC = () => {
     <div className="flex flex-col h-full bg-gray-50">
       {/* Error Display */}
       {error && (
-        <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-6 py-4 mx-6 mt-4 rounded-lg">
+        <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-6 py-4 mx-6 mt-4 rounded-lg flex-shrink-0">
           <p className="font-semibold">Error</p>
           <p className="text-sm mt-1">{error}</p>
         </div>
       )}
 
-      {/* Messages */}
-      <div className="flex-1 overflow-hidden">
+      {/* Messages - Scrollable area */}
+      <div className="flex-1 min-h-0 overflow-hidden">
         <MessageList
           messages={messages}
           streamingMessage={streamingMessage}
           isStreaming={isStreaming}
+          toolCalls={toolCalls}
         />
       </div>
 
       {/* Input */}
-      <div className="border-t border-gray-200 bg-white">
+      <div className="border-t border-gray-200 bg-white flex-shrink-0">
         <InputBox onSend={handleSend} disabled={isStreaming} />
       </div>
     </div>

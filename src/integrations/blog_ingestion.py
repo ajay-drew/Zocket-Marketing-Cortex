@@ -1,14 +1,15 @@
 """
 Blog Ingestion Client - Fetch, extract, and chunk blog content from RSS feeds
 """
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable, Awaitable
 import feedparser
 import httpx
 from readability import Document
 from bs4 import BeautifulSoup
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from src.config import settings
 from src.knowledge.vector_store import vector_store
+from src.core.queue import ParallelProcessor
 import logging
 import asyncio
 from datetime import datetime
@@ -195,7 +196,8 @@ class BlogIngestionClient:
         self,
         blog_name: str,
         feed_url: str,
-        max_posts: int = 50
+        max_posts: int = 50,
+        progress_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None
     ) -> Dict[str, Any]:
         """
         Main ingestion orchestration: fetch RSS, extract content, chunk, and store
@@ -210,6 +212,13 @@ class BlogIngestionClient:
         """
         try:
             logger.info(f"Starting blog ingestion: {blog_name} (max {max_posts} posts)")
+            
+            if progress_callback:
+                await progress_callback({
+                    "stage": "fetching",
+                    "message": f"Fetching RSS feed from {feed_url}...",
+                    "progress": 0
+                })
             
             # Fetch RSS feed
             entries = await self.fetch_rss_feed(feed_url)
@@ -227,31 +236,40 @@ class BlogIngestionClient:
             
             # Limit to max_posts
             entries = entries[:max_posts]
+            total_entries = len(entries)
+            
+            if progress_callback:
+                await progress_callback({
+                    "stage": "processing",
+                    "message": f"Found {total_entries} posts. Starting ingestion...",
+                    "progress": 5,
+                    "total": total_entries
+                })
             
             posts_ingested = 0
             chunks_created = 0
             errors = 0
             
-            # Process each entry
-            for i, entry in enumerate(entries, 1):
+            # Process entries in parallel with concurrency control
+            async def process_entry(entry_data: tuple[int, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+                """Process a single blog entry"""
+                i, entry = entry_data
                 try:
                     url = entry.get("link", "")
                     if not url:
                         logger.warning(f"Entry {i} has no link, skipping")
-                        errors += 1
-                        continue
+                        return {"error": True}
                     
                     # Check for duplicates
                     if await self.check_duplicate(url):
                         logger.debug(f"Skipping duplicate: {url}")
-                        continue
+                        return None
                     
                     # Extract content
                     article = await self.extract_article_content(url)
                     if not article:
                         logger.warning(f"Failed to extract content from: {url}")
-                        errors += 1
-                        continue
+                        return {"error": True}
                     
                     # Create chunks
                     metadata = {
@@ -269,24 +287,189 @@ class BlogIngestionClient:
                     
                     if not chunks:
                         logger.warning(f"No chunks created for: {url}")
-                        errors += 1
-                        continue
+                        return {"error": True}
                     
                     # Upsert to vector store
                     await vector_store.upsert_blog_content(chunks, metadata)
                     
-                    posts_ingested += 1
-                    chunks_created += len(chunks)
+                    # Extract entities and store in Neo4j (if enabled)
+                    if settings.enable_entity_extraction:
+                        try:
+                            from src.knowledge.entity_extractor import EntityExtractor
+                            from src.knowledge.graph_schema import graph_schema
+                            
+                            entity_extractor = EntityExtractor()
+                            
+                            # Process entity extraction for chunks in parallel (with semaphore control)
+                            async def extract_entities_for_chunk(chunk_data: tuple[int, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+                                """Extract entities for a single chunk"""
+                                chunk_idx, chunk = chunk_data
+                                try:
+                                    # Generate chunk ID using same logic as vector_store
+                                    chunk_index = chunk.get("chunk_index", chunk_idx)
+                                    chunk_id = f"blog_{hash(url)}_{chunk_index}"
+                                    chunk_text = chunk.get("text", "")
+                                    
+                                    if not chunk_text:
+                                        return None
+                                    
+                                    # Extract entities (with rate limiting built-in)
+                                    extraction_result = await entity_extractor.extract_entities(
+                                        content=chunk_text,
+                                        chunk_id=chunk_id,
+                                        url=url
+                                    )
+                                    
+                                    # Only process if entities were extracted (not empty due to rate limit)
+                                    if extraction_result.entities or extraction_result.relationships:
+                                        return {
+                                            "chunk_id": chunk_id,
+                                            "extraction_result": extraction_result,
+                                            "chunk_index": chunk_index
+                                        }
+                                    return None
+                                except Exception as e:
+                                    logger.warning(f"Error extracting entities for chunk {chunk_idx}: {e}")
+                                    return None
+                            
+                            # Process chunks in parallel (semaphore in EntityExtractor limits concurrency)
+                            chunks_with_index = [(i, chunk) for i, chunk in enumerate(chunks)]
+                            extraction_results = await ParallelProcessor.process_parallel(
+                                items=chunks_with_index,
+                                processor=extract_entities_for_chunk,
+                                max_concurrent=3,  # Limited by EntityExtractor semaphore
+                                progress_callback=None
+                            )
+                            
+                            # Store extracted entities in Neo4j
+                            for result in extraction_results:
+                                if result is None:
+                                    continue
+                                
+                                extraction_result = result["extraction_result"]
+                                chunk_id = result["chunk_id"]
+                                
+                                # Store entities in Neo4j
+                                entity_ids_map = {}  # Map entity names to IDs for relationships
+                                for entity in extraction_result.entities:
+                                    entity_id = EntityExtractor._generate_entity_id(entity.name, entity.type)
+                                    entity_ids_map[entity.name] = entity_id
+                                    
+                                    await graph_schema.create_marketing_entity(
+                                        entity_id=entity_id,
+                                        name=entity.name,
+                                        entity_type=entity.type,
+                                        confidence=entity.confidence,
+                                        metadata={"extracted_from": url}
+                                    )
+                                    
+                                    # Link entity to blog chunk
+                                    await graph_schema.link_entity_to_blog(
+                                        entity_id=entity_id,
+                                        chunk_id=chunk_id,
+                                        url=url,
+                                        blog_name=blog_name,
+                                        title=article.get("title", "")
+                                    )
+                                
+                                # Store relationships (need to find entity types for source/target)
+                                for relationship in extraction_result.relationships:
+                                    # Find source entity type
+                                    source_entity = next(
+                                        (e for e in extraction_result.entities if e.name == relationship.source),
+                                        None
+                                    )
+                                    target_entity = next(
+                                        (e for e in extraction_result.entities if e.name == relationship.target),
+                                        None
+                                    )
+                                    
+                                    if source_entity and target_entity:
+                                        source_id = EntityExtractor._generate_entity_id(relationship.source, source_entity.type)
+                                        target_id = EntityExtractor._generate_entity_id(relationship.target, target_entity.type)
+                                        
+                                        await graph_schema.create_entity_relationship(
+                                            source_entity_id=source_id,
+                                            target_entity_id=target_id,
+                                            relationship_type=relationship.type,
+                                            confidence=relationship.confidence,
+                                            metadata={"extracted_from": url}
+                                        )
+                            
+                            logger.debug(f"Extracted entities for post: {article['title'][:50]}")
+                        except Exception as e:
+                            logger.warning(f"Entity extraction failed for {url}: {e}")
+                            # Continue ingestion even if entity extraction fails
                     
-                    logger.info(f"Ingested post {i}/{len(entries)}: {article['title'][:50]}... ({len(chunks)} chunks)")
+                    logger.info(f"Ingested post {i}/{total_entries}: {article['title'][:50]}... ({len(chunks)} chunks)")
                     
-                    # Small delay to avoid overwhelming the system
-                    await asyncio.sleep(0.5)
+                    return {
+                        "success": True,
+                        "index": i,
+                        "title": article["title"],
+                        "chunks": len(chunks),
+                        "url": url
+                    }
                     
                 except Exception as e:
                     logger.error(f"Error processing entry {i}: {e}", exc_info=True)
+                    return {"error": True, "index": i}
+            
+            # Prepare entries with indices for parallel processing
+            entries_with_index = [(i + 1, entry) for i, entry in enumerate(entries)]
+            
+            # Progress callback wrapper
+            async def progress_wrapper(progress_data: Dict[str, Any]):
+                """Wrapper for progress callback"""
+                if progress_callback:
+                    await progress_callback({
+                        "stage": "processing",
+                        "message": f"Processing posts... ({progress_data['completed']}/{progress_data['total']} completed)",
+                        "progress": 5 + int((progress_data['completed'] / progress_data['total']) * 90) if progress_data['total'] > 0 else 5,
+                        "current": progress_data['completed'],
+                        "total": progress_data['total']
+                    })
+            
+            # Process in parallel with configurable concurrency
+            results = await ParallelProcessor.process_parallel(
+                items=entries_with_index,
+                processor=process_entry,
+                max_concurrent=settings.max_concurrent_posts,
+                progress_callback=progress_wrapper if progress_callback else None
+            )
+            
+            # Process results and update counters
+            for result in results:
+                if result is None:
+                    continue  # Skipped duplicate
+                elif result.get("error"):
                     errors += 1
-                    continue
+                elif result.get("success"):
+                    posts_ingested += 1
+                    chunks_created += result.get("chunks", 0)
+                    
+                    # Update progress for successful ingestion
+                    if progress_callback:
+                        progress = 5 + int((posts_ingested / total_entries) * 90) if total_entries > 0 else 5
+                        await progress_callback({
+                            "stage": "processing",
+                            "message": f"✓ Ingested: {result.get('title', 'Unknown')[:50]}... ({result.get('chunks', 0)} chunks)",
+                            "progress": progress,
+                            "current": posts_ingested,
+                            "total": total_entries,
+                            "posts_ingested": posts_ingested,
+                            "chunks_created": chunks_created
+                        })
+            
+            if progress_callback:
+                await progress_callback({
+                    "stage": "complete",
+                    "message": f"Ingestion complete! {posts_ingested} posts, {chunks_created} chunks",
+                    "progress": 100,
+                    "posts_ingested": posts_ingested,
+                    "chunks_created": chunks_created,
+                    "errors": errors
+                })
             
             result = {
                 "status": "success" if posts_ingested > 0 else "error",

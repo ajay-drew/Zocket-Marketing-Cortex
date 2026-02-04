@@ -70,9 +70,9 @@ function App() {
           onItemClick={handleSidebarClick}
           items={sidebarItems}
         />
-        <div className="flex-1 flex flex-col ml-60">
+        <div className="flex-1 flex flex-col ml-60 min-w-0">
           <Header title={headerInfo.title} subtitle={headerInfo.subtitle} />
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden min-h-0">
             {renderContent()}
           </div>
         </div>

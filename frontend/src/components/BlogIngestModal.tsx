@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ingestBlog } from '../services/api';
+import React, { useState, useRef } from 'react';
+import { ingestBlogStream } from '../services/api';
 
 interface BlogIngestModalProps {
   onClose: () => void;
@@ -12,7 +12,10 @@ export const BlogIngestModal: React.FC<BlogIngestModalProps> = ({ onClose, onSuc
   const [maxPosts, setMaxPosts] = useState(50);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<string | null>(null);
+  const [progress, setProgress] = useState<string>('');
+  const [progressPercent, setProgressPercent] = useState(0);
+  const [currentPost, setCurrentPost] = useState<{ current?: number; total?: number }>({});
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,18 +29,52 @@ export const BlogIngestModal: React.FC<BlogIngestModalProps> = ({ onClose, onSuc
       setLoading(true);
       setError(null);
       setProgress('Starting ingestion...');
+      setProgressPercent(0);
+      setCurrentPost({});
 
-      await ingestBlog(blogUrl, blogName, maxPosts);
+      // Cancel any existing request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
 
-      setProgress('Ingestion complete!');
-      setTimeout(() => {
-        onSuccess();
-      }, 1000);
+      // Create new abort controller
+      abortControllerRef.current = new AbortController();
+
+      await ingestBlogStream(
+        blogUrl,
+        blogName,
+        maxPosts,
+        (progressData) => {
+          // Update progress
+          if (progressData.progress !== undefined) {
+            setProgressPercent(progressData.progress);
+          }
+          if (progressData.message) {
+            setProgress(progressData.message);
+          }
+          if (progressData.current !== undefined && progressData.total !== undefined) {
+            setCurrentPost({ current: progressData.current, total: progressData.total });
+          }
+        },
+        (result) => {
+          setProgress(`✓ Ingestion complete! ${result.posts_ingested} posts, ${result.chunks_created} chunks`);
+          setProgressPercent(100);
+          setTimeout(() => {
+            onSuccess();
+          }, 1500);
+        },
+        (errorMessage) => {
+          setError(errorMessage);
+          setProgress('');
+        },
+        abortControllerRef.current.signal
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to ingest blog');
-      setProgress(null);
+      setProgress('');
     } finally {
       setLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -56,9 +93,34 @@ export const BlogIngestModal: React.FC<BlogIngestModalProps> = ({ onClose, onSuc
             </div>
           )}
 
-          {progress && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-sm text-blue-800">{progress}</p>
+          {/* Progress Section */}
+          {loading && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium text-blue-900">{progress || 'Processing...'}</span>
+                <span className="text-blue-700">{progressPercent}%</span>
+              </div>
+              
+              {/* Progress Bar */}
+              <div className="w-full h-2 bg-blue-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-600 transition-all duration-300 ease-out"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+
+              {/* Current Post Info */}
+              {currentPost.current && currentPost.total && (
+                <div className="text-xs text-blue-700">
+                  Post {currentPost.current} of {currentPost.total}
+                </div>
+              )}
+            </div>
+          )}
+
+          {!loading && progress && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+              <p className="text-sm text-green-800">{progress}</p>
             </div>
           )}
 

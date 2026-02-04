@@ -1,10 +1,29 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { streamAgentResponse, AgentRequest } from '../services/api';
 
+export interface ToolCallEvent {
+  type: 'tool_call_start' | 'tool_call_result' | 'query_refinement' | 'synthesis_start' | 'query_analysis' | 'evaluation';
+  tool?: string;
+  query?: string;
+  original?: string;
+  refined?: string;
+  sources?: string[];
+  reasoning?: string;
+  analysis?: any;
+  strategy?: string;
+  quality_score?: number;
+  results_count?: number;
+  overall_quality?: number;
+  result_count?: number;
+  next_action?: string;
+  [key: string]: any;
+}
+
 export interface UseSSEReturn {
   message: string;
   isStreaming: boolean;
   error: string | null;
+  toolCalls: ToolCallEvent[];
   sendMessage: (query: string, sessionId?: string) => void;
   clearMessage: () => void;
 }
@@ -16,13 +35,10 @@ export function useSSE(): UseSSEReturn {
   const [message, setMessage] = useState<string>('');
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [toolCalls, setToolCalls] = useState<ToolCallEvent[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const sendMessage = useCallback((query: string, sessionId?: string) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7253/ingest/3ac3d9b9-6b30-42fe-81b9-6705712ab86a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useSSE.ts:21',message:'sendMessage called',data:{query:query.substring(0,50),sessionId:sessionId||'none'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
     // Cancel any existing request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -31,6 +47,7 @@ export function useSSE(): UseSSEReturn {
     // Reset state
     setMessage('');
     setError(null);
+    setToolCalls([]);
     setIsStreaming(true);
 
     // Create new abort controller
@@ -41,24 +58,31 @@ export function useSSE(): UseSSEReturn {
       session_id: sessionId,
     };
 
-    // #region agent log
-    fetch('http://127.0.0.1:7253/ingest/3ac3d9b9-6b30-42fe-81b9-6705712ab86a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useSSE.ts:41',message:'calling streamAgentResponse',data:{requestQuery:request.query.substring(0,50),hasSessionId:!!request.session_id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-
     // Stream response
     streamAgentResponse(
       request,
       (chunk: string) => {
-        setMessage((prev) => prev + chunk);
+        // Check if this is a tool call event
+        if (chunk.startsWith('[EVENT:')) {
+          const eventMatch = chunk.match(/^\[EVENT:([^\]]+)\](.+)$/);
+          if (eventMatch) {
+            const eventType = eventMatch[1];
+            try {
+              const eventData = JSON.parse(eventMatch[2]);
+              setToolCalls((prev) => [...prev, { type: eventType as any, ...eventData }]);
+            } catch (e) {
+              console.error('Error parsing tool call event:', e);
+            }
+          }
+        } else {
+          setMessage((prev) => prev + chunk);
+        }
       },
       () => {
         setIsStreaming(false);
         abortControllerRef.current = null;
       },
       (errorMessage: string) => {
-        // #region agent log
-        fetch('http://127.0.0.1:7253/ingest/3ac3d9b9-6b30-42fe-81b9-6705712ab86a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useSSE.ts:50',message:'onError callback triggered',data:{errorMessage:errorMessage.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
         setError(errorMessage);
         setIsStreaming(false);
         abortControllerRef.current = null;
@@ -70,6 +94,7 @@ export function useSSE(): UseSSEReturn {
   const clearMessage = useCallback(() => {
     setMessage('');
     setError(null);
+    setToolCalls([]);
     setIsStreaming(false);
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -90,6 +115,7 @@ export function useSSE(): UseSSEReturn {
     message,
     isStreaming,
     error,
+    toolCalls,
     sendMessage,
     clearMessage,
   };

@@ -41,18 +41,10 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """Middleware to log all incoming HTTP requests"""
     
     async def dispatch(self, request: Request, call_next):
-        import json
         start_time = time.time()
         
         # Get client IP
         client_ip = request.client.host if request.client else 'unknown'
-        
-        # #region agent log
-        try:
-            with open(r'x:\majorProjects\Zocket-Marketing-Cortex\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                f.write(json.dumps({"location":"main.py:43","message":"middleware dispatch entry","data":{"method":request.method,"path":request.url.path,"client":client_ip},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"D"}) + '\n')
-        except: pass
-        # #endregion
         
         # Log incoming request
         request_msg = f"→ {request.method} {request.url.path} - Client: {client_ip}"
@@ -60,12 +52,6 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         
         # Special logging for agent/stream endpoint
         if "/agent/stream" in request.url.path:
-            # #region agent log
-            try:
-                with open(r'x:\majorProjects\Zocket-Marketing-Cortex\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({"location":"main.py:54","message":"agent/stream request detected","data":{"method":request.method,"path":request.url.path,"fullUrl":str(request.url)},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"D"}) + '\n')
-            except: pass
-            # #endregion
             logger.info(f"[MIDDLEWARE] Intercepted /agent/stream request - Method: {request.method}")
             logger.info(f"[MIDDLEWARE] Request path: {request.url.path}")
             logger.info(f"[MIDDLEWARE] Request URL: {request.url}")
@@ -73,19 +59,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         # Process request
         try:
             response = await call_next(request)
-            # #region agent log
-            try:
-                with open(r'x:\majorProjects\Zocket-Marketing-Cortex\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({"location":"main.py:61","message":"call_next completed","data":{"statusCode":response.status_code,"path":request.url.path},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"D"}) + '\n')
-            except: pass
-            # #endregion
         except Exception as e:
-            # #region agent log
-            try:
-                with open(r'x:\majorProjects\Zocket-Marketing-Cortex\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({"location":"main.py:64","message":"call_next exception","data":{"error":str(e)[:200],"path":request.url.path},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}) + '\n')
-            except: pass
-            # #endregion
             logger.error(f"Request failed: {request.method} {request.url.path} - Error: {e}", exc_info=True)
             raise
         

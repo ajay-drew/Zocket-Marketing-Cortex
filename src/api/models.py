@@ -106,3 +106,43 @@ class BlogSource(BaseModel):
 class BlogSourcesResponse(BaseModel):
     """Response with list of blog sources"""
     sources: List[BlogSource]
+
+
+class EntitySearchRequest(BaseModel):
+    """Request to search entities"""
+    query: str = Field(..., description="Search query for entities")
+    entity_types: Optional[List[str]] = Field(None, description="Optional entity type filters")
+    limit: int = Field(10, description="Maximum number of results")
+
+
+class EntityResponse(BaseModel):
+    """Entity information"""
+    id: str
+    name: str
+    entity_type: str
+    confidence: float
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class EntitySearchResponse(BaseModel):
+    """Response with entity search results"""
+    entities: List[EntityResponse]
+
+
+class EntityContextResponse(BaseModel):
+    """Response with entity context"""
+    entity: Optional[EntityResponse] = None
+    related_entities: List[Dict[str, Any]] = Field(default_factory=list)
+    blog_posts: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class EntityExtractionRequest(BaseModel):
+    """Request to manually trigger entity extraction"""
+    content: str = Field(..., description="Content to extract entities from")
+    url: Optional[str] = Field(None, description="Optional URL for linking")
+
+
+class EntityExtractionResponse(BaseModel):
+    """Response from entity extraction"""
+    entities: List[Dict[str, Any]] = Field(default_factory=list)
+    relationships: List[Dict[str, Any]] = Field(default_factory=list)

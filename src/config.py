@@ -72,6 +72,8 @@ class Settings(BaseSettings):
     ]
     chunk_size: int = 500  # Tokens per chunk
     chunk_overlap: int = 50  # Overlap between chunks
+    enable_entity_extraction: bool = True  # Enable entity extraction during blog ingestion
+    max_concurrent_posts: int = 5  # Maximum concurrent blog posts to process in parallel
 
 
 # Global settings instance

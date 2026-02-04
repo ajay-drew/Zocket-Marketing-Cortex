@@ -19,6 +19,7 @@ class GraphSchema:
         "CREATE CONSTRAINT adset_id IF NOT EXISTS FOR (a:AdSet) REQUIRE a.id IS UNIQUE",
         "CREATE CONSTRAINT creative_id IF NOT EXISTS FOR (cr:Creative) REQUIRE cr.id IS UNIQUE",
         "CREATE CONSTRAINT performance_id IF NOT EXISTS FOR (p:Performance) REQUIRE p.id IS UNIQUE",
+        "CREATE CONSTRAINT marketing_entity_id IF NOT EXISTS FOR (e:MarketingEntity) REQUIRE e.id IS UNIQUE",
     ]
     
     INDEXES = [
@@ -26,6 +27,8 @@ class GraphSchema:
         "CREATE INDEX adset_name IF NOT EXISTS FOR (a:AdSet) ON (a.name)",
         "CREATE INDEX creative_name IF NOT EXISTS FOR (cr:Creative) ON (cr.name)",
         "CREATE INDEX performance_date IF NOT EXISTS FOR (p:Performance) ON (p.date)",
+        "CREATE INDEX entity_name IF NOT EXISTS FOR (e:MarketingEntity) ON (e.name)",
+        "CREATE INDEX entity_type IF NOT EXISTS FOR (e:MarketingEntity) ON (e.entity_type)",
     ]
     
     def __init__(self):
@@ -353,6 +356,287 @@ class GraphSchema:
             records = await result.data()
             logger.info(f"Found {len(records)} high performers (ROAS >= {min_roas})")
             return records
+    
+    async def create_marketing_entity(
+        self,
+        entity_id: str,
+        name: str,
+        entity_type: str,
+        confidence: float = 1.0,
+        metadata: Optional[Dict] = None
+    ) -> Dict:
+        """
+        Create a MarketingEntity node
+        
+        Args:
+            entity_id: Unique entity identifier
+            name: Entity name
+            entity_type: Type of entity (AdPlatform, UserIntent, CreativeType, MarketingStrategy, MarketingConcept)
+            confidence: Confidence score (0.0 to 1.0)
+            metadata: Additional metadata
+            
+        Returns:
+            Created entity node
+        """
+        query = """
+        MERGE (e:MarketingEntity {id: $entity_id})
+        ON CREATE SET 
+            e.name = $name,
+            e.entity_type = $entity_type,
+            e.confidence = $confidence,
+            e.created_at = datetime(),
+            e.metadata = $metadata
+        ON MATCH SET
+            e.confidence = CASE 
+                WHEN $confidence > e.confidence THEN $confidence 
+                ELSE e.confidence 
+            END
+        RETURN e
+        """
+        
+        async with self.driver.session(database=settings.neo4j_database) as session:
+            result = await session.run(
+                query,
+                entity_id=entity_id,
+                name=name,
+                entity_type=entity_type,
+                confidence=confidence,
+                metadata=json.dumps(metadata or {})
+            )
+            record = await result.single()
+            if record:
+                logger.debug(f"Created/updated marketing entity: {entity_id} ({entity_type})")
+                return dict(record["e"])
+            return {}
+    
+    async def create_entity_relationship(
+        self,
+        source_entity_id: str,
+        target_entity_id: str,
+        relationship_type: str,
+        confidence: float = 1.0,
+        metadata: Optional[Dict] = None
+    ) -> bool:
+        """
+        Create a relationship between two entities
+        
+        Args:
+            source_entity_id: Source entity ID
+            target_entity_id: Target entity ID
+            relationship_type: Type of relationship (OPTIMIZES_FOR, RECOMMENDS_AGAINST, CONNECTED_TO, APPLIED_ON)
+            confidence: Confidence score (0.0 to 1.0)
+            metadata: Additional metadata
+            
+        Returns:
+            True if relationship created, False otherwise
+        """
+        query = f"""
+        MATCH (source:MarketingEntity {{id: $source_id}})
+        MATCH (target:MarketingEntity {{id: $target_id}})
+        MERGE (source)-[r:{relationship_type}]->(target)
+        ON CREATE SET 
+            r.confidence = $confidence,
+            r.created_at = datetime(),
+            r.metadata = $metadata
+        ON MATCH SET
+            r.confidence = CASE 
+                WHEN $confidence > r.confidence THEN $confidence 
+                ELSE r.confidence 
+            END
+        RETURN r
+        """
+        
+        try:
+            async with self.driver.session(database=settings.neo4j_database) as session:
+                result = await session.run(
+                    query,
+                    source_id=source_entity_id,
+                    target_id=target_entity_id,
+                    confidence=confidence,
+                    metadata=json.dumps(metadata or {})
+                )
+                record = await result.single()
+                if record:
+                    logger.debug(f"Created relationship: {source_entity_id} -[{relationship_type}]-> {target_entity_id}")
+                    return True
+                return False
+        except Exception as e:
+            logger.error(f"Error creating relationship: {e}")
+            return False
+    
+    async def link_entity_to_blog(
+        self,
+        entity_id: str,
+        chunk_id: str,
+        url: str,
+        blog_name: str,
+        title: Optional[str] = None
+    ) -> bool:
+        """
+        Link an entity to a blog post/chunk
+        
+        Args:
+            entity_id: Entity ID
+            chunk_id: Pinecone chunk ID
+            url: Blog post URL
+            blog_name: Blog name
+            title: Optional blog post title
+            
+        Returns:
+            True if link created, False otherwise
+        """
+        query = """
+        MATCH (e:MarketingEntity {id: $entity_id})
+        MERGE (b:BlogPost {chunk_id: $chunk_id})
+        ON CREATE SET
+            b.url = $url,
+            b.blog_name = $blog_name,
+            b.title = $title,
+            b.created_at = datetime()
+        MERGE (e)-[r:MENTIONED_IN]->(b)
+        RETURN r
+        """
+        
+        try:
+            async with self.driver.session(database=settings.neo4j_database) as session:
+                result = await session.run(
+                    query,
+                    entity_id=entity_id,
+                    chunk_id=chunk_id,
+                    url=url,
+                    blog_name=blog_name,
+                    title=title or ""
+                )
+                record = await result.single()
+                if record:
+                    logger.debug(f"Linked entity {entity_id} to blog chunk {chunk_id}")
+                    return True
+                return False
+        except Exception as e:
+            logger.error(f"Error linking entity to blog: {e}")
+            return False
+    
+    async def find_entities_by_query(
+        self,
+        query_text: str,
+        entity_types: Optional[List[str]] = None,
+        limit: int = 10
+    ) -> List[Dict]:
+        """
+        Find entities matching a query using text search
+        
+        Args:
+            query_text: Search query
+            entity_types: Optional list of entity types to filter
+            limit: Maximum number of results
+            
+        Returns:
+            List of matching entities
+        """
+        if entity_types:
+            type_filter = f"AND e.entity_type IN {entity_types}"
+        else:
+            type_filter = ""
+        
+        query = f"""
+        MATCH (e:MarketingEntity)
+        WHERE toLower(e.name) CONTAINS toLower($query_text)
+        {type_filter}
+        RETURN e
+        ORDER BY e.created_at DESC
+        LIMIT $limit
+        """
+        
+        try:
+            async with self.driver.session(database=settings.neo4j_database) as session:
+                result = await session.run(query, query_text=query_text, limit=limit)
+                records = await result.data()
+                logger.info(f"Found {len(records)} entities matching '{query_text}'")
+                return [dict(record["e"]) for record in records]
+        except Exception as e:
+            logger.error(f"Error finding entities: {e}")
+            return []
+    
+    async def get_entity_context(
+        self,
+        entity_id: str,
+        include_blog_posts: bool = True,
+        max_related: int = 5,
+        max_blog_posts: int = 10
+    ) -> Dict:
+        """
+        Get comprehensive context for an entity including related entities and blog posts
+        
+        Args:
+            entity_id: Entity ID
+            include_blog_posts: Whether to include linked blog posts
+            max_related: Maximum number of related entities
+            max_blog_posts: Maximum number of blog posts
+            
+        Returns:
+            Dictionary with entity, related entities, and blog posts
+        """
+        # Get entity
+        query_entity = """
+        MATCH (e:MarketingEntity {id: $entity_id})
+        RETURN e
+        """
+        
+        # Get related entities
+        query_related = """
+        MATCH (e:MarketingEntity {id: $entity_id})
+        MATCH (e)-[r]->(related:MarketingEntity)
+        RETURN related, type(r) as relationship_type, r.confidence as rel_confidence
+        ORDER BY r.confidence DESC
+        LIMIT $max_related
+        """
+        
+        # Get blog posts
+        query_blogs = """
+        MATCH (e:MarketingEntity {id: $entity_id})
+        MATCH (e)-[:MENTIONED_IN]->(b:BlogPost)
+        RETURN b
+        ORDER BY b.created_at DESC
+        LIMIT $max_blog_posts
+        """
+        
+        result = {
+            "entity": None,
+            "related_entities": [],
+            "blog_posts": []
+        }
+        
+        try:
+            async with self.driver.session(database=settings.neo4j_database) as session:
+                # Get entity
+                entity_result = await session.run(query_entity, entity_id=entity_id)
+                entity_record = await entity_result.single()
+                if entity_record:
+                    result["entity"] = dict(entity_record["e"])
+                
+                # Get related entities
+                related_result = await session.run(query_related, entity_id=entity_id, max_related=max_related)
+                related_records = await related_result.data()
+                result["related_entities"] = [
+                    {
+                        "entity": dict(record["related"]),
+                        "relationship_type": record["relationship_type"],
+                        "confidence": record["rel_confidence"]
+                    }
+                    for record in related_records
+                ]
+                
+                # Get blog posts
+                if include_blog_posts:
+                    blogs_result = await session.run(query_blogs, entity_id=entity_id, max_blog_posts=max_blog_posts)
+                    blogs_records = await blogs_result.data()
+                    result["blog_posts"] = [dict(record["b"]) for record in blogs_records]
+                
+                logger.info(f"Retrieved context for entity {entity_id}")
+                return result
+        except Exception as e:
+            logger.error(f"Error getting entity context: {e}")
+            return result
 
 
 # Global graph schema instance

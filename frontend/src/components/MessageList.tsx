@@ -1,4 +1,5 @@
 import React from 'react';
+import { ReasoningDisplay } from './ReasoningDisplay';
 
 export interface Message {
   id: string;
@@ -6,18 +7,39 @@ export interface Message {
   content: string;
   timestamp: Date;
   citations?: string[];
+  reasoning?: ToolCallEvent[];
+}
+
+interface ToolCallEvent {
+  type: 'tool_call_start' | 'tool_call_result' | 'query_refinement' | 'synthesis_start' | 'query_analysis' | 'evaluation';
+  tool?: string;
+  query?: string;
+  original?: string;
+  refined?: string;
+  sources?: string[];
+  reasoning?: string;
+  analysis?: any;
+  strategy?: string;
+  quality_score?: number;
+  results_count?: number;
+  overall_quality?: number;
+  result_count?: number;
+  next_action?: string;
+  [key: string]: any;
 }
 
 interface MessageListProps {
   messages: Message[];
   streamingMessage?: string;
   isStreaming?: boolean;
+  toolCalls?: ToolCallEvent[];
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
   messages,
   streamingMessage,
   isStreaming = false,
+  toolCalls = [],
 }) => {
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
@@ -33,7 +55,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   };
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 py-8 space-y-6">
+    <div className="h-full overflow-y-auto px-6 py-8 space-y-6">
       {messages.length === 0 && !streamingMessage && (
         <div className="flex items-center justify-center h-full">
           <div className="text-center max-w-md">
@@ -62,6 +84,11 @@ export const MessageList: React.FC<MessageListProps> = ({
                   : 'bg-white text-gray-900 border border-gray-200'
               }`}
             >
+              {/* Reasoning Display - Only for assistant messages */}
+              {message.role === 'assistant' && message.reasoning && message.reasoning.length > 0 && (
+                <ReasoningDisplay reasoningSteps={message.reasoning} />
+              )}
+              
               <div className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</div>
               
               {citations.length > 0 && message.role === 'assistant' && (
@@ -94,6 +121,48 @@ export const MessageList: React.FC<MessageListProps> = ({
           </div>
         );
       })}
+
+      {/* Tool Calls Display */}
+      {toolCalls.length > 0 && isStreaming && (
+        <div className="flex justify-start mb-4">
+          <div className="max-w-3xl rounded-lg px-4 py-3 bg-blue-50 border border-blue-200">
+            <div className="text-sm font-medium text-blue-900 mb-2">Agent Thinking:</div>
+            <div className="space-y-2">
+              {toolCalls.map((event, idx) => {
+                if (event.type === 'tool_call_start') {
+                  return (
+                    <div key={idx} className="flex items-center gap-2 text-sm text-blue-700">
+                      <span className="animate-spin">⏳</span>
+                      <span>Searching {event.tool?.replace('_', ' ')}...</span>
+                    </div>
+                  );
+                } else if (event.type === 'tool_call_result') {
+                  return (
+                    <div key={idx} className="flex items-center gap-2 text-sm text-green-700">
+                      <span>✓</span>
+                      <span>Found {event.results_count || 0} results from {event.tool?.replace('_', ' ')}</span>
+                    </div>
+                  );
+                } else if (event.type === 'query_refinement') {
+                  return (
+                    <div key={idx} className="text-sm text-purple-700">
+                      <span className="font-medium">Refining query:</span> "{event.original}" → "{event.refined}"
+                    </div>
+                  );
+                } else if (event.type === 'synthesis_start') {
+                  return (
+                    <div key={idx} className="flex items-center gap-2 text-sm text-indigo-700">
+                      <span className="animate-pulse">🧠</span>
+                      <span>Synthesizing results from {event.sources?.length || 0} sources...</span>
+                    </div>
+                  );
+                }
+                return null;
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {streamingMessage && (
         <div className="flex justify-start">

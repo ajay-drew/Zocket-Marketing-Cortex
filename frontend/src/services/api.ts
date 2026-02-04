@@ -37,10 +37,16 @@ export interface AgentRequest {
 }
 
 export interface SSEEvent {
-  type: 'start' | 'token' | 'done' | 'error';
+  type: 'start' | 'token' | 'done' | 'error' | 'tool_call_start' | 'tool_call_result' | 'query_refinement' | 'synthesis_start' | 'query_analysis';
   content?: string;
   session_id?: string;
   error?: string;
+  tool?: string;
+  query?: string;
+  original?: string;
+  refined?: string;
+  sources?: string[];
+  [key: string]: any; // Allow additional properties
 }
 
 /**
@@ -126,14 +132,21 @@ export async function streamAgentResponse(
         if (line.startsWith('data: ')) {
           try {
             const data = JSON.parse(line.slice(6));
+            // Handle different event types
             if (data.type === 'token' && data.content) {
               onChunk(data.content);
             } else if (data.type === 'error') {
-              onError(data.error || 'Unknown error');
+              onError(data.error || data.content || 'Unknown error');
               return;
             } else if (data.type === 'done') {
               onComplete();
               return;
+            } else if (data.type === 'tool_call_start' || data.type === 'tool_call_result' || 
+                       data.type === 'query_refinement' || data.type === 'synthesis_start' ||
+                       data.type === 'query_analysis' || data.type === 'evaluation') {
+              // Tool call events - pass through to onChunk with special marker
+              // Format: [EVENT:type] JSON data
+              onChunk(`[EVENT:${data.type}]${JSON.stringify(data)}`);
             }
           } catch (e) {
             console.error('Error parsing SSE data:', e);
@@ -206,6 +219,92 @@ export async function ingestBlog(
   }
 
   return response.json();
+}
+
+/**
+ * Stream blog ingestion progress via SSE
+ */
+export async function ingestBlogStream(
+  blogUrl: string,
+  blogName: string,
+  maxPosts: number,
+  onProgress: (data: any) => void,
+  onComplete: (result: BlogIngestResponse) => void,
+  onError: (error: string) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  let url: string;
+  if (API_BASE_URL) {
+    const base = API_BASE_URL.replace(/\/$/, '');
+    url = `${base}/api/blogs/ingest/stream`;
+  } else {
+    url = '/api/blogs/ingest/stream';
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+      },
+      body: JSON.stringify({
+        blog_url: blogUrl,
+        blog_name: blogName,
+        max_posts: maxPosts,
+      }),
+      signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (!reader) {
+      throw new Error('Response body is not readable');
+    }
+
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            
+            if (data.type === 'progress') {
+              onProgress(data);
+            } else if (data.type === 'complete') {
+              onComplete(data.result);
+              return;
+            } else if (data.type === 'error') {
+              onError(data.error || 'Unknown error');
+              return;
+            } else if (data.type === 'start') {
+              onProgress({ stage: 'start', message: data.message, progress: 0 });
+            }
+          } catch (e) {
+            console.error('Error parsing SSE data:', e);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    onError(error instanceof Error ? error.message : 'Unknown error');
+  }
 }
 
 /**
