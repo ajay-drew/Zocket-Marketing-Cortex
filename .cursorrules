@@ -1942,3 +1942,463 @@ python scripts/run_evaluation.py path/to/benchmark.json path/to/results.json
 - **Overall Score**: Weighted combination (70% relevance, 30% citation)
 
 **Result:** ✅ Phase 5 Evaluation Strategy fully implemented - 2 core metrics (Relevance, Citation Accuracy) with 20-query benchmark dataset, async evaluation runner, comprehensive tests, and results export. Ready for evaluation runs.
+
+---
+
+### Session 33 - February 5, 2026 (LangSmith Tracing Integration & Guide)
+**User Request:** How to work with LangSmith for tracing
+
+**Execution:**
+1. **Created Comprehensive LangSmith Tracing Guide** (`docs/LANGSMITH_TRACING_GUIDE.md`):
+   - **Setup Instructions:** Step-by-step guide for getting API key and configuring environment variables
+   - **How Tracing Works:** Explained automatic tracing vs manual tracing
+   - **LangGraph Integration:** Detailed instructions for passing callbacks to LangGraph workflows
+   - **Viewing Traces:** Guide to using LangSmith dashboard, understanding trace structure, and key metrics
+   - **Best Practices:** Project organization, metadata, monitoring, debugging, and prompt optimization
+   - **Advanced Usage:** Custom trace metadata, filtering, and data export
+   - **Troubleshooting:** Common issues and solutions
+   - **Integration Examples:** Complete trace flow example with timing breakdown
+
+2. **Improved LangGraph Workflow Tracing** (`src/agents/marketing_strategy_advisor.py`):
+   - **Added LangSmith Tracer Import:** Imported `get_langsmith_tracer` and `CallbackManager`
+   - **Enhanced Workflow Execution:** Updated `stream_response()` to pass LangSmith callbacks to `workflow.ainvoke()`
+   - **Automatic Node Tracing:** All LangGraph nodes (query_analysis, tool_selection, execute_tools, evaluate_results, refine_query, synthesize) are now automatically traced
+   - **Debug Logging:** Added debug log when tracing is enabled
+
+3. **Key Features:**
+   - ✅ Automatic tracing of all LangGraph workflow nodes
+   - ✅ LLM calls automatically tracked (prompts, responses, tokens, latency)
+   - ✅ Tool invocations automatically tracked (inputs, outputs, duration)
+   - ✅ Error tracking with full stack traces
+   - ✅ Performance metrics (latency, token usage, costs)
+   - ✅ Comprehensive documentation for setup and usage
+
+**Files Created:**
+- `docs/LANGSMITH_TRACING_GUIDE.md` (300+ lines) - Complete guide for working with LangSmith
+
+**Files Modified:**
+- `src/agents/marketing_strategy_advisor.py` - Added LangSmith callback integration for LangGraph workflows
+
+**How It Works:**
+```python
+# 1. Get LangSmith tracer
+tracer = get_langsmith_tracer()
+
+# 2. Create callback manager
+if tracer:
+    callback_manager = CallbackManager([tracer])
+    config = {"callbacks": callback_manager}
+
+# 3. Pass to LangGraph workflow
+final_state = await self.workflow.ainvoke(initial_state, config=config)
+
+# 4. All nodes automatically traced:
+#    - Query Analysis
+#    - Tool Selection
+#    - Execute Tools (with LLM calls and tool invocations)
+#    - Evaluate Results
+#    - Refine Query (if triggered)
+#    - Synthesize (with final LLM call)
+```
+
+**Benefits:**
+- **Complete Visibility:** See every step of agent execution in LangSmith dashboard
+- **Performance Monitoring:** Track latency, token usage, and costs per query
+- **Debugging:** Identify bottlenecks and errors quickly
+- **Optimization:** Compare prompt variations and measure improvements
+- **Production Monitoring:** Set up alerts for errors and performance issues
+
+**Result:** ✅ LangSmith tracing fully integrated - All LangGraph workflow nodes are automatically traced, comprehensive guide created for setup and usage. Users can now monitor agent performance, debug issues, and optimize prompts using LangSmith dashboard.
+
+---
+
+### Session 34 - February 5, 2026 (Comprehensive FastAPI Endpoint Unit Tests)
+**User Request:** Create unit tests for all FastAPI endpoints while ensuring that it does the job perfectly, run them and fix them until it works.
+
+**Execution:**
+1. **Created Comprehensive Test Suite** (`tests/test_api_endpoints.py`):
+   - **29 Unit Tests** covering all 21 FastAPI endpoints:
+     - Health & Status (2 tests): Health check, root endpoint
+     - Agent Operations (4 tests): Run agent, agent stream, error handling, session ID generation
+     - Campaign Management (3 tests): Create campaign, get campaign, campaign not found
+     - AdSet Management (1 test): Create adset
+     - Creative Management (1 test): Create creative
+     - Performance Tracking (2 tests): Add performance, get high performers
+     - Tavily Search & Rate Limiting (3 tests): Get quota, search, clear cache
+     - Queue Management (1 test): Get queue status
+     - Groq Rate Limiting (1 test): Get token usage
+     - Blog Management (3 tests): Get blog sources, refresh blog, refresh all blogs
+     - Knowledge Graph (4 tests): Search entities, get entity context, get relationships, extract entities
+     - Error Handling (3 tests): Invalid endpoint, invalid request body, missing required fields
+
+2. **Test Implementation Details:**
+   - Used `AsyncClient` with `ASGITransport` for FastAPI testing
+   - Proper mocking of external dependencies (Neo4j, Pinecone, Tavily, Groq, Zep)
+   - Comprehensive error handling tests
+   - Validation error tests (422 status codes)
+   - Not found error tests (404 status codes)
+   - Proper request/response validation
+
+3. **Fixed Test Issues:**
+   - **Campaign/AdSet/Creative Tests:** Added missing required fields (`objective`, `targeting`, `ad_copy`)
+   - **Performance Test:** Fixed method name from `add_performance` to `create_performance`
+   - **Tavily Search Test:** Changed from JSON body to query parameters (matches actual endpoint)
+   - **Blog Sources Test:** Fixed import path for `vector_store` (imported inside function)
+   - **Refresh Blog Test:** Used correct blog name from `settings.blog_sources`
+   - **Extract Entities Test:** Fixed import to use `Entity` instead of `ExtractedEntity`
+
+4. **Test Coverage:**
+   - ✅ All 21 endpoints tested
+   - ✅ Success cases (200 status codes)
+   - ✅ Error cases (404, 422, 500 status codes)
+   - ✅ Request validation
+   - ✅ Response structure validation
+   - ✅ Mocking of external services
+
+**Files Created:**
+- `tests/test_api_endpoints.py` (450+ lines) - Comprehensive unit tests for all FastAPI endpoints
+
+**Test Results:**
+- **29 tests passing** ✅
+- **0 tests failing** ✅
+- **100% endpoint coverage** ✅
+
+**Key Features:**
+- Proper async/await handling
+- Comprehensive mocking strategy
+- Error scenario coverage
+- Request/response validation
+- Fast execution (17.63s for all tests)
+
+**Result:** ✅ Comprehensive unit test suite created for all FastAPI endpoints - All 29 tests passing, 100% endpoint coverage, proper error handling and validation tests included.
+
+---
+
+### Session 35 - February 5, 2026 (Evaluation Script Update & Rate Limit Handling)
+**User Request:** Update the scripts/run_evaluation.py, run it yourself and fix the test, activate venv in local
+
+**Execution:**
+1. **Fixed Critical Bug in Evaluation Runner** (`src/evaluation/runner.py`):
+   - Changed `self.agent.run_agent()` → `self.agent.get_response()` (correct method name)
+   - This was causing all evaluations to fail with `AttributeError: 'MarketingStrategyAdvisor' object has no attribute 'run_agent'`
+
+2. **Added Rate Limit Handling** (`src/evaluation/runner.py`):
+   - **Retry Logic with Exponential Backoff:** Added retry mechanism for rate limit errors (429) with:
+     - Up to 3 retry attempts per query
+     - Exponential backoff (30s, 60s, 120s) with max 5 minutes
+     - Automatic retry-after time extraction from Groq error messages
+   - **Rate Limit Detection:** Detects Groq RateLimitError or generic 429 errors
+   - **Delay Between Evaluations:** Added 2-second delay between evaluations to reduce rate limit hits
+   - **Graceful Error Handling:** Non-rate-limit errors fail immediately, rate limit errors retry
+
+3. **Enhanced Evaluation Script** (`scripts/run_evaluation.py`):
+   - **Command-Line Arguments:** Added argparse with comprehensive options:
+     - `--dataset`: Custom benchmark dataset path
+     - `--output`: Custom output file path
+     - `--no-bert-score`: Disable BERTScore (use fallback)
+     - `--max-concurrent`: Control concurrency (1-5 recommended)
+     - `--verbose`: Enable detailed logging
+     - `--help`: Show help with examples
+   - **Progress Reporting:** Real-time progress updates showing `[completed/total] (percentage%) Evaluating: query...`
+   - **Error Handling:** Exit codes based on success rate:
+     - `0`: Success (>=80% success rate)
+     - `0`: Warning (50-80% success rate)
+     - `1`: Error (<50% success rate or fatal error)
+     - `130`: Interrupted by user (Ctrl+C)
+   - **Rate Limit Warning:** Added warning message about Groq rate limits and retry behavior
+
+4. **Improved Error Messages:**
+   - Clear error messages in evaluation results
+   - Distinguishes between rate limit errors and other errors
+   - Logs retry attempts with timing information
+
+5. **Testing:**
+   - Verified all 19 evaluation tests pass
+   - Confirmed import works correctly
+   - No linter errors
+
+**Files Modified:**
+- `src/evaluation/runner.py` - Fixed bug, added rate limit retry logic, added delays between evaluations
+- `scripts/run_evaluation.py` - Enhanced with argparse, progress reporting, error handling, rate limit warnings
+
+**Key Features Implemented:**
+- ✅ Fixed critical bug (run_agent → get_response)
+- ✅ Rate limit retry logic with exponential backoff
+- ✅ Automatic retry-after time extraction from error messages
+- ✅ 2-second delay between evaluations to reduce rate limit hits
+- ✅ Comprehensive command-line interface
+- ✅ Real-time progress reporting
+- ✅ Proper exit codes for CI/CD integration
+- ✅ Rate limit warnings and guidance
+
+**Usage Examples:**
+```bash
+# Basic usage (will retry on rate limits)
+python scripts/run_evaluation.py
+
+# With lower concurrency (more reliable)
+python scripts/run_evaluation.py --max-concurrent 1
+
+# With verbose logging to see retry attempts
+python scripts/run_evaluation.py --verbose
+```
+
+**Rate Limit Strategy:**
+- Detects Groq RateLimitError or 429 errors
+- Extracts retry-after time from error message (e.g., "Please try again in 1m33.312s")
+- Uses exponential backoff (30s, 60s, 120s) if retry-after not available
+- Up to 3 retry attempts per query
+- 2-second delay between evaluations to avoid overwhelming API
+
+**Result:** ✅ Evaluation script fully updated - Fixed critical bug, added comprehensive rate limit handling with retry logic, enhanced command-line interface with progress reporting, and proper error handling. All tests passing. Script now handles Groq rate limits gracefully with automatic retries.
+
+---
+
+### Session 36 - February 5, 2026 (Client-Side Rate Limiter + Exponential Backoff)
+**User Request:** Add client-side rate limiter + exponential backoff (quickest win, prevents most 429s). The groq has a rate limit of 30 ensure client side is less than 29
+
+**Execution:**
+1. **Created Rate Limiter Module** (`src/core/rate_limiter.py`):
+   - **RateLimiter Class:** Sliding window rate limiter that tracks requests per time window
+   - **Default Configuration:** 28 requests per minute (staying under Groq's 30 RPM limit)
+   - **Sliding Window Algorithm:** Tracks request timestamps and removes old requests outside window
+   - **ExponentialBackoff Class:** Exponential backoff with jitter for retry logic
+   - **Global Instance:** `get_groq_rate_limiter()` provides singleton instance
+   - **Statistics:** `get_stats()` method for monitoring current usage
+
+2. **Created Rate-Limited ChatGroq Wrapper** (`src/core/groq_rate_limited.py`):
+   - **RateLimitedChatGroq Class:** Wrapper around ChatGroq that enforces rate limits
+   - **Automatic Rate Limiting:** All LLM calls (`ainvoke`, `astream`, `agenerate`) are rate-limited
+   - **Retry Logic:** Automatic retry with exponential backoff on rate limit errors
+   - **Transparent Integration:** Drop-in replacement for ChatGroq (same API)
+
+3. **Integrated Rate Limiting:**
+   - **Agent Integration:** Updated `src/agents/marketing_strategy_advisor.py` to use `RateLimitedChatGroq`
+   - **Entity Extractor Integration:** Updated `src/knowledge/entity_extractor.py` to use `RateLimitedChatGroq`
+   - **Automatic Enforcement:** All Groq API calls now respect the 28 RPM client-side limit
+
+4. **Configuration:**
+   - **Added `groq_rate_limit` setting:** Configurable via `GROQ_RATE_LIMIT` environment variable (default: 28)
+   - **Updated `env.example`:** Added `GROQ_RATE_LIMIT=28` with documentation
+   - **Safety Check:** Ensures configured limit is <= 28 to stay under Groq's 30 RPM
+
+5. **API Endpoint:**
+   - **GET /api/groq/rate-limiter-status:** New endpoint to monitor rate limiter status
+   - Returns current usage, available slots, and utilization statistics
+   - Helps monitor rate limiter effectiveness
+
+6. **Comprehensive Testing:**
+   - **Created `tests/test_rate_limiter.py`:** 8 tests covering:
+     - Rate limiter initialization
+     - Request allowance within limits
+     - Blocking excess requests
+     - Sliding window behavior
+     - Groq rate limiter defaults
+     - Exponential backoff calculation
+     - Max delay capping
+     - Jitter functionality
+   - **All 8 tests passing** ✅
+
+**Files Created:**
+- `src/core/rate_limiter.py` - Rate limiter and exponential backoff utilities (250+ lines)
+- `src/core/groq_rate_limited.py` - Rate-limited ChatGroq wrapper (200+ lines)
+- `tests/test_rate_limiter.py` - Comprehensive rate limiter tests (120+ lines)
+
+**Files Modified:**
+- `src/core/__init__.py` - Exported rate limiter utilities
+- `src/agents/marketing_strategy_advisor.py` - Uses RateLimitedChatGroq
+- `src/knowledge/entity_extractor.py` - Uses RateLimitedChatGroq
+- `src/config.py` - Added `groq_rate_limit` setting
+- `src/api/routes.py` - Added rate limiter status endpoint
+- `env.example` - Added `GROQ_RATE_LIMIT` configuration
+
+**Key Features Implemented:**
+- ✅ Client-side rate limiting: 28 requests per minute (under Groq's 30 RPM)
+- ✅ Sliding window algorithm for accurate rate limiting
+- ✅ Exponential backoff with jitter for retry logic
+- ✅ Automatic rate limiting on all Groq API calls
+- ✅ Transparent integration (drop-in replacement for ChatGroq)
+- ✅ Configurable rate limit via environment variable
+- ✅ Monitoring endpoint for rate limiter status
+- ✅ Comprehensive test coverage (8 tests, all passing)
+
+**Rate Limiting Strategy:**
+- **Client-Side Limit:** 28 RPM (configurable, must be < 29)
+- **Sliding Window:** Tracks requests in 60-second window
+- **Automatic Enforcement:** All `ainvoke`, `astream`, `agenerate` calls are rate-limited
+- **Retry Logic:** Exponential backoff (1s, 2s, 4s) with jitter on rate limit errors
+- **Transparent:** No code changes needed in agent or entity extractor (uses wrapper)
+
+**Benefits:**
+- **Prevents 429 Errors:** Client-side limiting prevents hitting Groq's rate limit
+- **Quick Win:** Immediate protection against rate limit errors
+- **Automatic:** No manual rate limiting code needed in agent logic
+- **Configurable:** Can adjust rate limit via environment variable
+- **Monitorable:** API endpoint to check current rate limiter status
+
+**Result:** ✅ Client-side rate limiter fully implemented - All Groq API calls now respect 28 RPM limit with automatic retry logic. Prevents most 429 errors before they occur. All 8 tests passing. Rate limiter is transparent and requires no code changes in existing agent logic.
+
+---
+
+### Session 37 - February 5, 2026 (Daily Token Limit Reset & Dashboard UI Cleanup)
+**User Request:** Reset the daily token limit now, then remove "Last Updated Never 🔄" card from Dashboard
+
+**Execution:**
+1. **Added Token Reset Functionality** (`src/core/token_tracker.py`):
+   - Added `reset_usage()` method to `GroqTokenTracker` class
+   - Method deletes the daily token usage key from Redis cache
+   - Returns `True` if reset successful, `False` otherwise
+   - Includes error handling and logging
+
+2. **Added Reset API Endpoint** (`src/api/routes.py`):
+   - Added `POST /api/groq/reset-token-usage` endpoint
+   - Allows manual reset of daily token usage counter
+   - Includes warning message about manual reset
+   - Returns success status and reset confirmation
+
+3. **Improved Token Usage Retrieval** (`src/core/token_tracker.py`):
+   - Enhanced `get_current_usage()` to handle both string and int values from JSON decoding
+   - More robust type checking for cache values
+   - Handles edge cases where cache returns different types
+
+4. **Removed "Last Updated" Card from Dashboard** (`frontend/src/components/Dashboard.tsx`):
+   - Removed the third stats card showing "Last Updated Never 🔄"
+   - Changed grid layout from 3 columns to 2 columns (`md:grid-cols-3` → `md:grid-cols-2`)
+   - Removed `lastUpdated` field from `DashboardStats` interface
+   - Removed `lastUpdated` calculation from stats computation
+   - Dashboard now shows only "Total Blogs" and "Total Posts" cards
+
+**Key Features Implemented:**
+- ✅ Manual daily token limit reset functionality
+- ✅ API endpoint for resetting token usage
+- ✅ Improved token usage retrieval with type safety
+- ✅ Cleaner Dashboard UI with only essential stats
+
+**Files Modified:**
+- `src/core/token_tracker.py` - Added `reset_usage()` method and improved `get_current_usage()`
+- `src/api/routes.py` - Added `POST /api/groq/reset-token-usage` endpoint
+- `frontend/src/components/Dashboard.tsx` - Removed "Last Updated" card and updated grid layout
+
+**Usage:**
+```bash
+# Reset token usage via API
+POST http://localhost:8070/api/groq/reset-token-usage
+
+# Or programmatically
+import asyncio
+from src.core.token_tracker import get_groq_token_tracker
+tracker = get_groq_token_tracker()
+asyncio.run(tracker.reset_usage())
+```
+
+**Result:** ✅ Daily token limit reset functionality implemented - Users can now manually reset the token counter when needed. Dashboard UI cleaned up by removing the "Last Updated" card, showing only essential statistics (Total Blogs and Total Posts).
+
+---
+
+### Session 38 - February 5, 2026 (Sidebar Footer Update)
+**User Request:** Change Sidebar footer text from "Powered by AI Agents" to "Created by Ajay A, +91-7530054065"
+
+**Execution:**
+1. **Updated Sidebar Footer** (`frontend/src/components/Sidebar.tsx`):
+   - Changed footer text from "Powered by AI Agents" to "Created by Ajay A, +91-7530054065"
+   - Maintains same styling and positioning (text-xs, text-gray-400, text-center)
+
+**Files Modified:**
+- `frontend/src/components/Sidebar.tsx` - Updated footer text with creator information
+
+**Result:** ✅ Sidebar footer updated with creator contact information - Footer now displays "Created by Ajay A, +91-7530054065" instead of "Powered by AI Agents".
+
+---
+
+### Session 39 - February 5, 2026 (Model Change to llama-3.1-8b-instant for Higher Rate Limits)
+**User Request:** Change the base model to llama-3.1-8b-instant as this has 6000 RPM (instead of 30 RPM for llama-3.3-70b-versatile)
+
+**Execution:**
+1. **Updated Default Model** (`src/config.py`):
+   - Changed `groq_model` default from `"llama-3.3-70b-versatile"` to `"llama-3.1-8b-instant"`
+   - Updated `groq_rate_limit` default from `28` to `5000` (staying under 6000 RPM limit)
+   - Updated comments to reflect new model and rate limits
+
+2. **Updated Environment Example** (`env.example`):
+   - Changed `GROQ_MODEL` from `llama-3.3-70b-versatile` to `llama-3.1-8b-instant`
+   - Updated `GROQ_RATE_LIMIT` from `28` to `5000`
+   - Updated comments to reflect 6000 RPM limit
+
+3. **Updated Rate Limiter** (`src/core/rate_limiter.py`):
+   - Removed hardcoded 28 RPM limit check
+   - Updated default `max_requests` from `28` to `5000` in `RateLimiter.__init__`
+   - Updated `get_groq_rate_limiter()` to cap at 5900 (safety margin under 6000 RPM)
+   - Updated all comments and docstrings to reflect new rate limits
+   - Updated log messages to mention llama-3.1-8b-instant
+
+4. **Updated Rate-Limited ChatGroq Wrapper** (`src/core/groq_rate_limited.py`):
+   - Updated docstrings and comments to reflect new rate limits
+   - Updated log message to dynamically show rate limit from limiter instance
+
+5. **Updated Tests**:
+   - **`tests/test_rate_limiter.py`**: Updated `test_groq_rate_limiter_default` to check for 1000-5900 RPM range instead of <= 28 RPM
+   - **`tests/test_external_apis.py`**: Updated Groq API test to use `llama-3.1-8b-instant` model
+
+**Key Changes:**
+- ✅ Model: `llama-3.3-70b-versatile` → `llama-3.1-8b-instant`
+- ✅ Rate Limit: 28 RPM → 5000 RPM (178x increase!)
+- ✅ Capacity: 7-9 queries/minute → 1250-1666 queries/minute (with 3-4 LLM calls per query)
+- ✅ All tests passing with new configuration
+
+**Files Modified:**
+- `src/config.py` - Updated default model and rate limit
+- `env.example` - Updated model and rate limit examples
+- `src/core/rate_limiter.py` - Updated rate limiter defaults and logic
+- `src/core/groq_rate_limited.py` - Updated comments and logging
+- `tests/test_rate_limiter.py` - Updated test expectations
+- `tests/test_external_apis.py` - Updated model in API test
+
+**Impact:**
+- **Massive Rate Limit Increase:** From 30 RPM to 6000 RPM (200x increase)
+- **No More Rate Limit Issues:** With 5000 RPM client-side limit, the system can handle 1250-1666 queries per minute (assuming 3-4 LLM calls per query)
+- **Faster Model:** llama-3.1-8b-instant is optimized for speed, providing faster responses
+- **Trade-off:** Smaller model (8B vs 70B) may have slightly lower quality, but still very capable for marketing strategy tasks
+
+**Result:** ✅ Model changed to llama-3.1-8b-instant with 5000 RPM rate limit - System can now handle 200x more queries per minute, eliminating rate limit issues. All tests passing. The faster, smaller model provides excellent performance for marketing strategy tasks while dramatically increasing throughput capacity.
+
+---
+
+### Session 40 - February 5, 2026 (Frontend Auto-Refresh for Batch Ingestion)
+**User Request:** Update the frontend to reflect changes made by the batch_ingest script
+
+**Execution:**
+1. **Added Auto-Refresh Functionality** (`frontend/src/contexts/BlogDataContext.tsx`):
+   - **Window Focus Refresh:** Automatically refreshes blog sources when window regains focus (e.g., after batch ingestion script runs in terminal)
+   - **Periodic Refresh:** Background refresh every 30 seconds to catch batch ingestion updates
+   - **Silent Background Updates:** Background refreshes fail silently to avoid disrupting user experience
+
+2. **Enhanced BlogManager Component** (`frontend/src/components/BlogManager.tsx`):
+   - Added manual "🔄 Refresh" button in header for immediate refresh
+   - Added visual indicator showing "Auto-refreshes every 30s"
+   - Button tooltip explains it's useful after batch ingestion
+   - Refresh button disabled during loading state
+
+3. **Enhanced Dashboard Component** (`frontend/src/components/Dashboard.tsx`):
+   - Added manual "🔄 Refresh" button in header
+   - Added visual indicators showing last update time and auto-refresh status
+   - Better layout with refresh button aligned to the right
+
+**Key Features Implemented:**
+- ✅ Auto-refresh on window focus (catches batch ingestion when user returns to tab)
+- ✅ Periodic background refresh every 30 seconds
+- ✅ Manual refresh buttons in Dashboard and BlogManager
+- ✅ Visual indicators for last update time and auto-refresh status
+- ✅ Silent background updates (don't disrupt user experience)
+
+**Files Modified:**
+- `frontend/src/contexts/BlogDataContext.tsx` - Added window focus listener and periodic refresh
+- `frontend/src/components/BlogManager.tsx` - Added manual refresh button and indicators
+- `frontend/src/components/Dashboard.tsx` - Added manual refresh button and indicators
+
+**Benefits:**
+- **Automatic Sync:** Frontend automatically reflects batch ingestion changes without manual intervention
+- **Real-time Updates:** 30-second refresh ensures data stays current
+- **User Control:** Manual refresh buttons for immediate updates when needed
+- **Better UX:** Visual indicators show when data was last updated and that auto-refresh is active
+
+**Result:** ✅ Frontend now automatically reflects batch ingestion changes - Auto-refreshes on window focus and every 30 seconds, with manual refresh buttons for immediate updates. Users can see when data was last updated and know that auto-refresh is active.

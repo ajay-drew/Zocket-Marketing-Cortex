@@ -90,7 +90,7 @@ class MemoryManager:
     @circuit_breaker("zep")
     def get_memory(self, session_id: str) -> Optional[Memory]:
         """
-        Retrieve conversation memory for a session
+        Retrieve conversation memory for a session (synchronous - for backward compatibility)
         
         Args:
             session_id: Session identifier
@@ -102,6 +102,37 @@ class MemoryManager:
         
         try:
             memory = self.client.memory.get(session_id)
+            logger.debug(f"Retrieved memory for session {session_id}")
+            return memory
+        except CircuitBreakerOpenError:
+            # Circuit breaker is open, return None (no memory)
+            logger.warning(f"⚠️ Circuit breaker open for Zep, returning no memory for session {session_id}")
+            return None
+        except Exception as e:
+            alert_manager.record_error("zep_get_memory_error", "zep", {"error": str(e), "session_id": session_id})
+            logger.error(f"Error retrieving memory: {e}")
+            return None
+    
+    @circuit_breaker("zep")
+    async def get_memory_async(self, session_id: str) -> Optional[Memory]:
+        """
+        Retrieve conversation memory for a session (async - non-blocking)
+        
+        Args:
+            session_id: Session identifier
+            
+        Returns:
+            Memory object with conversation history
+        """
+        from src.observability.circuit_breaker import CircuitBreakerOpenError
+        
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            memory = await loop.run_in_executor(
+                None,
+                lambda: self.client.memory.get(session_id)
+            )
             logger.debug(f"Retrieved memory for session {session_id}")
             return memory
         except CircuitBreakerOpenError:

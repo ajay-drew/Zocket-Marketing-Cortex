@@ -33,48 +33,6 @@ class AgentResponse(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
-class CampaignCreate(BaseModel):
-    """Request to create a campaign"""
-    campaign_id: str
-    name: str
-    objective: str
-    budget: float
-    start_date: str
-    metadata: Optional[Dict] = None
-
-
-class AdSetCreate(BaseModel):
-    """Request to create an adset"""
-    adset_id: str
-    campaign_id: str
-    name: str
-    targeting: Dict
-    budget: float
-    metadata: Optional[Dict] = None
-
-
-class CreativeCreate(BaseModel):
-    """Request to create a creative"""
-    creative_id: str
-    adset_id: str
-    name: str
-    ad_copy: str = Field(..., description="The advertising copy text")
-    image_url: Optional[str] = None
-    metadata: Optional[Dict] = None
-
-
-class PerformanceCreate(BaseModel):
-    """Request to create a performance record"""
-    performance_id: str
-    creative_id: str
-    date: str
-    impressions: int
-    clicks: int
-    conversions: int
-    spend: float
-    revenue: float
-
-
 class BlogIngestRequest(BaseModel):
     """Request to ingest blog content"""
     blog_url: str = Field(..., description="RSS feed URL")

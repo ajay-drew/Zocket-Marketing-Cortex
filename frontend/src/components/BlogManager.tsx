@@ -40,22 +40,6 @@ export const BlogManager: React.FC = () => {
     }
   };
 
-  const handleRefreshAll = async () => {
-    try {
-      setIngesting(prev => new Set(prev).add('all'));
-      await refreshBlog();
-      invalidateCache(); // Invalidate cache and refresh
-    } catch (err) {
-      alert(`Failed to refresh all blogs: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    } finally {
-      setIngesting(prev => {
-        const next = new Set(prev);
-        next.delete('all');
-        return next;
-      });
-    }
-  };
-
   if (loading) {
     return (
       <div className="p-8">
@@ -83,28 +67,25 @@ export const BlogManager: React.FC = () => {
                 • Last updated: {new Date(lastFetched).toLocaleTimeString()}
               </span>
             )}
+            <span className="text-xs text-gray-400 ml-2">
+              • Auto-refreshes every 30s
+            </span>
           </p>
         </div>
         <div className="flex gap-3">
+          <button
+            onClick={() => refresh()}
+            disabled={loading}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Manually refresh blog sources (e.g., after batch ingestion)"
+          >
+            {loading ? 'Refreshing...' : '🔄 Refresh'}
+          </button>
           <button
             onClick={() => setShowModal(true)}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
           >
             + Add Blog
-          </button>
-          <button
-            onClick={() => refresh()}
-            disabled={loading}
-            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Loading...' : 'Refresh Data'}
-          </button>
-          <button
-            onClick={handleRefreshAll}
-            disabled={ingesting.has('all')}
-            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {ingesting.has('all') ? 'Refreshing...' : 'Refresh All Blogs'}
           </button>
         </div>
       </div>

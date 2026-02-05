@@ -198,7 +198,7 @@ class TavilyClient:
                 return cached_result
         
         # Step 2: Check rate limit
-        current_count = await self._get_monthly_count()
+        current_count = self._get_monthly_count()
         if current_count >= self.MONTHLY_LIMIT:
             logger.error(f"🚨 Tavily monthly limit exceeded: {current_count}/{self.MONTHLY_LIMIT}")
             raise TavilyRateLimitError(

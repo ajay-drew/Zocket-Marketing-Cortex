@@ -6,7 +6,6 @@ import asyncio
 from unittest.mock import Mock, patch, AsyncMock
 from src.observability import (
     get_langsmith_client,
-    get_langfuse_client,
     get_structured_logger,
     set_request_id,
     get_request_id,
@@ -48,18 +47,6 @@ class TestLangSmithConfig:
             client = get_langsmith_client()
             # Should attempt to create client (may fail without real key, but should try)
             assert mock_client.called or client is None
-
-
-class TestLangfuseConfig:
-    """Tests for Langfuse integration"""
-    
-    def test_get_langfuse_client_not_configured(self):
-        """Test Langfuse client returns None when not configured"""
-        with patch('src.observability.langfuse_config.settings') as mock_settings:
-            mock_settings.enable_langfuse = False
-            from src.observability.langfuse_config import get_langfuse_client
-            client = get_langfuse_client()
-            assert client is None
 
 
 class TestStructuredLogging:

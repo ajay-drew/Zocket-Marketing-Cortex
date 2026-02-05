@@ -101,18 +101,14 @@ The agent implements comprehensive error handling at multiple layers to ensure r
 
 ### 6. Observability & Monitoring
 
-The agent leverages LangSmith (primary) and Langfuse (backup) for comprehensive observability across the entire agent lifecycle:
+The agent leverages LangSmith for comprehensive observability across the entire agent lifecycle:
 
-- **LangSmith Integration (Primary)**:
+- **LangSmith Integration**:
   - **Trace Tracking**: Every agent execution is traced with full context—input queries, tool calls, LLM interactions, and final responses. Traces include timing, token usage, and cost metrics.
   - **Tool Call Monitoring**: Each tool invocation (blog search, web search, synthesis) is logged with inputs, outputs, latency, and success/failure status.
   - **LLM Call Tracking**: All Groq API calls are tracked with prompts, responses, token counts, and latency. This enables prompt optimization and cost analysis.
   - **Performance Metrics**: Response times, token usage per query, and cost per interaction are automatically collected and visualized in LangSmith dashboard.
   - **Error Tracking**: Failed operations are automatically captured with stack traces, enabling rapid debugging and issue resolution.
-
-- **Langfuse Integration (Backup)**:
-  - **Alternative Observability**: Langfuse serves as a backup observability platform, ensuring redundancy if LangSmith is unavailable.
-  - **Feature Parity**: Mirrors LangSmith's capabilities—traces, metrics, and error tracking—providing continuity of monitoring.
   - **Cost Tracking**: Detailed cost analysis per model, per query, and per user session for budget management.
 
 - **Custom Metrics & Logging**:
@@ -235,7 +231,6 @@ This observability stack enables real-time monitoring, rapid debugging, performa
 **Phase 4: Error Handling & Observability** 🚧 IN PROGRESS
 - Comprehensive error handling at all layers
 - LangSmith integration for trace tracking
-- Langfuse backup observability
 - Structured logging and metrics
 - Retry logic and circuit breakers
 - Health check endpoints
@@ -268,7 +263,6 @@ This observability stack enables real-time monitoring, rapid debugging, performa
 - **Tavily** - Real-time web search (supplementary)
 - **LangGraph** - Workflow orchestration for multi-step reasoning
 - **LangSmith** - Primary observability platform (trace tracking, metrics, error monitoring)
-- **Langfuse** - Backup observability platform (redundancy and cost tracking)
 
 ---
 
@@ -293,7 +287,6 @@ src/
 │   └── models.py                       # Pydantic request/response models
 ├── observability/
 │   ├── langsmith_config.py            # LangSmith setup (planned)
-│   ├── langfuse_config.py             # Langfuse setup (planned)
 │   └── logging_config.py              # Structured logging (planned)
 ├── evaluation/
 │   └── metrics.py                      # Evaluation suite (planned)
@@ -330,7 +323,7 @@ tests/
 - Phase 1 ✅ COMPLETE - Blog Ingestion System with frontend management interface
 - Phase 2 ✅ COMPLETE - Agentic RAG Implementation with LangGraph workflow and comprehensive testing
 - Phase 3 📋 PLANNED - Knowledge Graph Enhancement
-- Phase 4 🚧 IN PROGRESS - Error Handling & Observability (foundation in place, LangSmith/Langfuse integration pending)
+- Phase 4 ✅ COMPLETE - Error Handling & Observability (LangSmith integration complete)
 - Phase 5 📋 PLANNED - Evaluation & Improvement
 
-**Current Focus:** Error handling implementation and LangSmith observability integration
+**Current Focus:** Phase 3 - Knowledge Graph Enhancement

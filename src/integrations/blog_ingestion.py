@@ -52,16 +52,70 @@ class BlogIngestionClient:
         try:
             logger.info(f"Fetching RSS feed: {feed_url}")
             
+            # Validate and auto-correct common RSS feed URL patterns
+            original_url = feed_url
+            if not any(feed_url.endswith(ext) for ext in ['/feed', '/feed/', '/rss', '/rss.xml', '.xml', '/atom.xml']):
+                # Try common RSS feed patterns in parallel for faster detection
+                base_url = feed_url.rstrip('/')
+                common_patterns = [
+                    f"{base_url}/feed/",
+                    f"{base_url}/feed",
+                    f"{base_url}/rss.xml",
+                    f"{base_url}/rss",
+                ]
+                
+                # Try all patterns in parallel
+                async def test_pattern(pattern: str) -> Optional[str]:
+                    """Test a single pattern and return it if valid"""
+                    try:
+                        async with httpx.AsyncClient(timeout=5.0) as test_client:
+                            test_response = await test_client.get(pattern, follow_redirects=True)
+                            if test_response.status_code == 200:
+                                # Check if it's actually an RSS feed
+                                content_type = test_response.headers.get('content-type', '').lower()
+                                if 'xml' in content_type or 'rss' in content_type or 'atom' in content_type:
+                                    return pattern
+                    except Exception:
+                        pass
+                    return None
+                
+                # Test all patterns in parallel
+                import asyncio
+                results = await asyncio.gather(*[test_pattern(p) for p in common_patterns], return_exceptions=True)
+                
+                # Find first valid result
+                for result in results:
+                    if result and isinstance(result, str):
+                        feed_url = result
+                        logger.info(f"Auto-corrected RSS feed URL: {original_url} -> {feed_url}")
+                        break
+                else:
+                    logger.warning(f"URL '{original_url}' doesn't look like an RSS feed. Tried common patterns but none worked.")
+            
             # Use httpx for async HTTP requests
             async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(feed_url)
+                response = await client.get(feed_url, follow_redirects=True)
                 response.raise_for_status()
+                
+                # Check content type (handle Mock objects in tests)
+                content_type = response.headers.get('content-type', '')
+                if not isinstance(content_type, str):
+                    content_type = str(content_type) if content_type else ''
+                content_type = content_type.lower()
+                if 'html' in content_type and 'xml' not in content_type and 'rss' not in content_type and 'atom' not in content_type:
+                    logger.error(f"URL returned HTML instead of RSS feed. This is likely a webpage, not an RSS feed.")
+                    logger.error(f"Common RSS feed URLs: {feed_url.rstrip('/')}/feed/, {feed_url.rstrip('/')}/feed, {feed_url.rstrip('/')}/rss.xml")
+                    return []
                 
                 # Parse RSS feed
                 feed = feedparser.parse(response.text)
                 
                 if feed.bozo:
                     logger.warning(f"Feed parsing warning: {feed.bozo_exception}")
+                    # If parsing failed and we got HTML, suggest the correct URL
+                    if response.text and 'html' in response.text[:200].lower():
+                        logger.error(f"Received HTML instead of RSS feed. Try: {feed_url.rstrip('/')}/feed/ or {feed_url.rstrip('/')}/rss.xml")
+                        return []
                 
                 entries = []
                 for entry in feed.entries:
@@ -77,9 +131,26 @@ class BlogIngestionClient:
                 logger.info(f"Fetched {len(entries)} entries from RSS feed")
                 return entries
                 
+        except httpx.HTTPStatusError as e:
+            error_msg = f"HTTP error {e.response.status_code} when fetching RSS feed"
+            if e.response.status_code == 404:
+                error_msg = f"RSS feed not found (404). Please verify the URL: {feed_url}"
+            elif e.response.status_code == 403:
+                error_msg = f"Access forbidden (403). The RSS feed may require authentication."
+            logger.error(f"{error_msg}: {e}", exc_info=True)
+            raise ValueError(error_msg) from e
+        except httpx.TimeoutException as e:
+            error_msg = f"Request timeout when fetching RSS feed: {feed_url}"
+            logger.error(f"{error_msg}: {e}", exc_info=True)
+            raise ValueError(error_msg) from e
+        except httpx.RequestError as e:
+            error_msg = f"Network error when fetching RSS feed: {feed_url}. {str(e)}"
+            logger.error(f"{error_msg}: {e}", exc_info=True)
+            raise ValueError(error_msg) from e
         except Exception as e:
-            logger.error(f"Error fetching RSS feed {feed_url}: {e}", exc_info=True)
-            raise
+            error_msg = f"Error fetching RSS feed {feed_url}: {str(e)}"
+            logger.error(f"{error_msg}: {e}", exc_info=True)
+            raise ValueError(error_msg) from e
     
     async def extract_article_content(self, url: str) -> Optional[Dict[str, str]]:
         """
@@ -221,17 +292,44 @@ class BlogIngestionClient:
                 })
             
             # Fetch RSS feed
-            entries = await self.fetch_rss_feed(feed_url)
-            
-            if not entries:
-                logger.warning(f"No entries found in RSS feed: {feed_url}")
+            try:
+                entries = await self.fetch_rss_feed(feed_url)
+            except ValueError as e:
+                # RSS feed fetch error (invalid URL, network error, etc.)
+                error_message = str(e)
+                if progress_callback:
+                    await progress_callback({
+                        "stage": "error",
+                        "message": error_message,
+                        "progress": 0,
+                        "error": True
+                    })
                 return {
                     "status": "error",
                     "blog_name": blog_name,
                     "posts_ingested": 0,
                     "chunks_created": 0,
                     "errors": 1,
-                    "message": "No entries found in RSS feed"
+                    "message": error_message
+                }
+            
+            if not entries:
+                error_message = f"No entries found in RSS feed: {feed_url}. The feed may be empty or invalid."
+                logger.warning(error_message)
+                if progress_callback:
+                    await progress_callback({
+                        "stage": "error",
+                        "message": error_message,
+                        "progress": 0,
+                        "error": True
+                    })
+                return {
+                    "status": "error",
+                    "blog_name": blog_name,
+                    "posts_ingested": 0,
+                    "chunks_created": 0,
+                    "errors": 1,
+                    "message": error_message
                 }
             
             # Limit to max_posts
@@ -250,7 +348,8 @@ class BlogIngestionClient:
             chunks_created = 0
             errors = 0
             
-            # Process entries in parallel with concurrency control
+            # Process entries sequentially to avoid rate limits
+            # With entity extraction, even 2-3 concurrent posts can hit rate limits
             async def process_entry(entry_data: tuple[int, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
                 """Process a single blog entry"""
                 i, entry = entry_data
@@ -332,14 +431,19 @@ class BlogIngestionClient:
                                     logger.warning(f"Error extracting entities for chunk {chunk_idx}: {e}")
                                     return None
                             
-                            # Process chunks in parallel (semaphore in EntityExtractor limits concurrency)
+                            # Process chunks sequentially to avoid rate limits
+                            # Even with semaphore=1, parallel processing can cause bursts
                             chunks_with_index = [(i, chunk) for i, chunk in enumerate(chunks)]
-                            extraction_results = await ParallelProcessor.process_parallel(
-                                items=chunks_with_index,
-                                processor=extract_entities_for_chunk,
-                                max_concurrent=3,  # Limited by EntityExtractor semaphore
-                                progress_callback=None
-                            )
+                            extraction_results = []
+                            
+                            # Process chunks one at a time with delays
+                            for chunk_data in chunks_with_index:
+                                result = await extract_entities_for_chunk(chunk_data)
+                                extraction_results.append(result)
+                                
+                                # Add delay between entity extractions to avoid rate limits
+                                if settings.entity_extraction_delay > 0:
+                                    await asyncio.sleep(settings.entity_extraction_delay)
                             
                             # Store extracted entities in Neo4j
                             for result in extraction_results:
@@ -430,13 +534,26 @@ class BlogIngestionClient:
                         "total": progress_data['total']
                     })
             
-            # Process in parallel with configurable concurrency
-            results = await ParallelProcessor.process_parallel(
-                items=entries_with_index,
-                processor=process_entry,
-                max_concurrent=settings.max_concurrent_posts,
-                progress_callback=progress_wrapper if progress_callback else None
-            )
+            # Process entries sequentially to avoid rate limits
+            # With entity extraction, parallel processing causes rate limit issues
+            results = []
+            for i, entry_data in enumerate(entries_with_index):
+                result = await process_entry(entry_data)
+                results.append(result)
+                
+                # Update progress
+                if progress_callback:
+                    await progress_callback({
+                        "stage": "processing",
+                        "message": f"Processing posts... ({i + 1}/{total_entries} completed)",
+                        "progress": 5 + int(((i + 1) / total_entries) * 90) if total_entries > 0 else 5,
+                        "current": i + 1,
+                        "total": total_entries
+                    })
+                
+                # Add delay between posts to avoid rate limits
+                if settings.blog_processing_delay > 0 and i < len(entries_with_index) - 1:
+                    await asyncio.sleep(settings.blog_processing_delay)
             
             # Process results and update counters
             for result in results:
@@ -483,13 +600,41 @@ class BlogIngestionClient:
             logger.info(f"Blog ingestion complete: {blog_name} - {posts_ingested} posts, {chunks_created} chunks, {errors} errors")
             return result
             
-        except Exception as e:
-            logger.error(f"Error ingesting blog {blog_name}: {e}", exc_info=True)
+        except ValueError as e:
+            # Validation errors (RSS feed issues, etc.)
+            error_message = str(e)
+            logger.error(f"Validation error ingesting blog {blog_name}: {e}", exc_info=True)
+            if progress_callback:
+                await progress_callback({
+                    "stage": "error",
+                    "message": error_message,
+                    "progress": 0,
+                    "error": True
+                })
             return {
                 "status": "error",
                 "blog_name": blog_name,
                 "posts_ingested": 0,
                 "chunks_created": 0,
                 "errors": 1,
-                "message": str(e)
+                "message": error_message
+            }
+        except Exception as e:
+            # Unexpected errors
+            error_message = f"Unexpected error during ingestion: {str(e)}"
+            logger.error(f"Error ingesting blog {blog_name}: {e}", exc_info=True)
+            if progress_callback:
+                await progress_callback({
+                    "stage": "error",
+                    "message": error_message,
+                    "progress": 0,
+                    "error": True
+                })
+            return {
+                "status": "error",
+                "blog_name": blog_name,
+                "posts_ingested": 0,
+                "chunks_created": 0,
+                "errors": 1,
+                "message": error_message
             }

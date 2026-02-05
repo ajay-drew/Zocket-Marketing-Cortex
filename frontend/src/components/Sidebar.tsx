@@ -14,7 +14,7 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemClick, items }) => {
   return (
-    <div className="w-60 bg-gray-800 text-white flex flex-col h-screen fixed left-0 top-0">
+    <div data-testid="sidebar" className="w-60 bg-gray-800 text-white flex flex-col h-screen fixed left-0 top-0">
       {/* Logo/Brand */}
       <div className="p-6 border-b border-gray-700">
         <h1 className="text-xl font-bold">Marketing Cortex</h1>
@@ -45,7 +45,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeItem, onItemClick, items
       {/* Footer */}
       <div className="p-4 border-t border-gray-700">
         <p className="text-xs text-gray-400 text-center">
-          Powered by AI Agents
+          Created by Ajay A, +91-7530054065
         </p>
       </div>
     </div>

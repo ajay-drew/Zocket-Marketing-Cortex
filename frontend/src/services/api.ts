@@ -222,6 +222,36 @@ export async function ingestBlog(
 }
 
 /**
+ * Check if blog already exists
+ */
+export async function checkBlogDuplicate(
+  blogName: string,
+  blogUrl: string
+): Promise<{ exists: boolean; exists_in_sources: boolean; has_content_in_pinecone: boolean; message: string }> {
+  let url: string;
+  if (API_BASE_URL) {
+    const base = API_BASE_URL.replace(/\/$/, '');
+    url = `${base}/api/blogs/check-duplicate?blog_name=${encodeURIComponent(blogName)}&blog_url=${encodeURIComponent(blogUrl)}`;
+  } else {
+    url = `/api/blogs/check-duplicate?blog_name=${encodeURIComponent(blogName)}&blog_url=${encodeURIComponent(blogUrl)}`;
+  }
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'Unknown error');
+    throw new Error(`Failed to check blog duplicate: ${errorText}`);
+  }
+
+  return response.json();
+}
+
+/**
  * Stream blog ingestion progress via SSE
  */
 export async function ingestBlogStream(
@@ -291,7 +321,31 @@ export async function ingestBlogStream(
               onComplete(data.result);
               return;
             } else if (data.type === 'error') {
-              onError(data.error || 'Unknown error');
+              // Handle structured error with details
+              const errorMessage = data.error || 'Unknown error';
+              const errorType = data.error_type || 'unknown';
+              let fullErrorMessage = errorMessage;
+              
+              // Add helpful context based on error type
+              if (errorType === 'http_error') {
+                if (data.status_code === 404) {
+                  fullErrorMessage = `RSS feed not found. Please check the URL: ${data.feed_url || 'unknown'}`;
+                } else if (data.status_code === 403) {
+                  fullErrorMessage = `Access forbidden. The RSS feed may require authentication or be blocked.`;
+                } else {
+                  fullErrorMessage = `HTTP error ${data.status_code}: ${errorMessage}`;
+                }
+              } else if (errorType === 'timeout_error') {
+                fullErrorMessage = `Request timeout. The RSS feed took too long to respond. Please check the URL: ${data.feed_url || 'unknown'}`;
+              } else if (errorType === 'network_error') {
+                fullErrorMessage = `Network error: ${errorMessage}. Please check your internet connection.`;
+              } else if (errorType === 'validation_error') {
+                fullErrorMessage = `Invalid RSS feed format: ${errorMessage}. The URL may not be a valid RSS feed. Try adding /feed/ or /rss.xml to the URL.`;
+              } else if (errorType === 'ingestion_error') {
+                fullErrorMessage = `Ingestion error: ${errorMessage}`;
+              }
+              
+              onError(fullErrorMessage);
               return;
             } else if (data.type === 'start') {
               onProgress({ stage: 'start', message: data.message, progress: 0 });

@@ -77,6 +77,7 @@ async def test_fetch_rss_feed(blog_client, sample_rss_feed):
         mock_response = Mock()
         mock_response.text = sample_rss_feed
         mock_response.raise_for_status = Mock()
+        mock_response.headers = {'Content-Type': 'application/xml'}  # Proper RSS feed content type
         
         mock_client_instance = AsyncMock()
         mock_client_instance.__aenter__.return_value = mock_client_instance

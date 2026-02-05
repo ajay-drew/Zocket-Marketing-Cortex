@@ -8,10 +8,6 @@ from src.api.models import (
     HealthResponse,
     AgentRequest,
     AgentResponse,
-    CampaignCreate,
-    AdSetCreate,
-    CreativeCreate,
-    PerformanceCreate,
     BlogIngestRequest,
     BlogIngestResponse,
     BlogRefreshRequest,
@@ -36,7 +32,6 @@ from src.observability import (
     get_request_id,
     get_alert_manager,
     get_langsmith_client,
-    get_langfuse_client
 )
 from src.observability.circuit_breaker import get_circuit_breaker
 from src.observability.circuit_breaker import CircuitBreakerOpenError
@@ -44,6 +39,7 @@ from datetime import datetime
 import logging
 import uuid
 import json
+import httpx
 
 logger = get_structured_logger(__name__)
 alert_manager = get_alert_manager()
@@ -106,9 +102,11 @@ async def health_check():
     """
     services = {}
     
-    # Check Neo4j
+    # Check Neo4j (simple connection test, not full schema init)
     try:
-        await graph_schema.initialize_schema()
+        async with graph_schema.driver.session(database=settings.neo4j_database) as session:
+            result = await session.run("RETURN 1 as test")
+            await result.consume()  # Consume result to complete query
         services["neo4j"] = "healthy"
     except Exception as e:
         logger.error(f"Neo4j health check failed: {e}")
@@ -116,16 +114,16 @@ async def health_check():
     
     # Check Redis
     try:
-        await cache_manager.ping()
-        services["redis"] = "healthy"
+        is_healthy = await cache_manager.ping()
+        services["redis"] = "healthy" if is_healthy else "unhealthy: connection failed"
     except Exception as e:
         logger.error(f"Redis health check failed: {e}")
         services["redis"] = f"unhealthy: {str(e)}"
     
-    # Check Zep (memory)
+    # Check Zep (memory) - async version
     try:
-        # Simple check - try to get a test session
-        memory_manager.get_memory("health-check")
+        # Simple check - try to get a test session (async)
+        test_memory = await memory_manager.get_memory_async("health-check")
         services["zep"] = "healthy"
     except Exception as e:
         logger.error(f"Zep health check failed: {e}")
@@ -147,12 +145,6 @@ async def health_check():
         observability["langsmith"] = "connected" if langsmith_client else "not_configured"
     except Exception as e:
         observability["langsmith"] = f"error: {str(e)}"
-    
-    try:
-        langfuse_client = get_langfuse_client()
-        observability["langfuse"] = "connected" if langfuse_client else "not_configured"
-    except Exception as e:
-        observability["langfuse"] = f"error: {str(e)}"
     
     # Get performance metrics (simplified - in production, this would query metrics store)
     performance = {
@@ -309,179 +301,6 @@ async def stream_agent(request: AgentRequest):
     )
 
 
-# Campaign management endpoints
-@router.post(
-    "/campaigns",
-    tags=["Campaign Management"],
-    summary="Create Campaign",
-    description="Create a new marketing campaign in the knowledge graph"
-)
-async def create_campaign(campaign: CampaignCreate):
-    """
-    Create a new campaign
-    """
-    try:
-        result = await graph_schema.create_campaign(
-            campaign_id=campaign.campaign_id,
-            name=campaign.name,
-            objective=campaign.objective,
-            budget=campaign.budget,
-            start_date=campaign.start_date,
-            metadata=campaign.metadata
-        )
-        return result
-    except Exception as e:
-        logger.error(f"Error creating campaign: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Campaign creation failed: {str(e)}"
-        )
-
-
-@router.get(
-    "/campaigns/{campaign_id}",
-    tags=["Campaign Management"],
-    summary="Get Campaign",
-    description="Get campaign details with full hierarchy (adsets, creatives, performance)"
-)
-async def get_campaign(campaign_id: str):
-    """
-    Get campaign with full hierarchy
-    """
-    try:
-        result = await graph_schema.get_campaign_hierarchy(campaign_id)
-        if not result:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Campaign {campaign_id} not found"
-            )
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting campaign: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get campaign: {str(e)}"
-        )
-
-
-# AdSet endpoints
-@router.post(
-    "/adsets",
-    tags=["AdSet Management"],
-    summary="Create AdSet",
-    description="Create a new adset linked to a campaign"
-)
-async def create_adset(adset: AdSetCreate):
-    """
-    Create a new adset
-    """
-    try:
-        result = await graph_schema.create_adset(
-            adset_id=adset.adset_id,
-            campaign_id=adset.campaign_id,
-            name=adset.name,
-            targeting=adset.targeting,
-            budget=adset.budget,
-            metadata=adset.metadata
-        )
-        return result
-    except Exception as e:
-        logger.error(f"Error creating adset: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Adset creation failed: {str(e)}"
-        )
-
-
-# Creative endpoints
-@router.post(
-    "/creatives",
-    tags=["Creative Management"],
-    summary="Create Creative",
-    description="Create a new creative linked to an adset"
-)
-async def create_creative(creative: CreativeCreate):
-    """
-    Create a new creative
-    """
-    try:
-        result = await graph_schema.create_creative(
-            creative_id=creative.creative_id,
-            adset_id=creative.adset_id,
-            name=creative.name,
-            copy=creative.ad_copy,
-            image_url=creative.image_url,
-            metadata=creative.metadata
-        )
-        return result
-    except Exception as e:
-        logger.error(f"Error creating creative: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Creative creation failed: {str(e)}"
-        )
-
-
-# Performance endpoints
-@router.post(
-    "/performance",
-    tags=["Performance Tracking"],
-    summary="Add Performance Data",
-    description="Add performance metrics for a creative"
-)
-async def add_performance(performance: PerformanceCreate):
-    """
-    Add performance data
-    """
-    try:
-        result = await graph_schema.create_performance(
-            performance_id=performance.performance_id,
-            creative_id=performance.creative_id,
-            date=performance.date,
-            impressions=performance.impressions,
-            clicks=performance.clicks,
-            conversions=performance.conversions,
-            spend=performance.spend,
-            revenue=performance.revenue
-        )
-        return result
-    except Exception as e:
-        logger.error(f"Error adding performance: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Performance creation failed: {str(e)}"
-        )
-
-
-@router.get(
-    "/high-performers",
-    tags=["Performance Tracking"],
-    summary="Query High Performers",
-    description="Get high-performing creatives based on ROAS threshold"
-)
-async def get_high_performers(
-    min_roas: float = Query(2.0, description="Minimum ROAS threshold"),
-    limit: int = Query(10, description="Maximum number of results", ge=1, le=100)
-):
-    """
-    Get high-performing creatives
-    """
-    try:
-        results = await graph_schema.query_high_performers(
-            min_roas=min_roas,
-            limit=limit
-        )
-        return {"results": results}
-    except Exception as e:
-        logger.error(f"Error querying high performers: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to query high performers: {str(e)}"
-        )
-
-
 # Tavily search endpoints
 @router.get(
     "/tavily/quota",
@@ -584,39 +403,95 @@ async def get_queue_status():
 
 # Groq token usage endpoints
 @router.get(
+    "/groq/rate-limiter-status",
+    tags=["Groq Rate Limiting"],
+    summary="Get Rate Limiter Status",
+    description="Check current client-side rate limiter status (requests per minute)"
+)
+async def get_rate_limiter_status():
+    """
+    Get client-side rate limiter status
+    
+    Returns:
+        Rate limiter statistics including current usage and available slots
+    """
+    try:
+        from src.core.rate_limiter import get_groq_rate_limiter
+        
+        rate_limiter = get_groq_rate_limiter()
+        stats = rate_limiter.get_stats()
+        
+        return {
+            "status": "active",
+            "rate_limiter": stats,
+            "message": f"Client-side rate limiter: {stats['requests_in_window']}/{stats['max_requests']} requests in current window"
+        }
+    except Exception as e:
+        logger.error(f"Error getting rate limiter status: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+@router.get(
     "/groq/token-usage",
     tags=["Groq Rate Limiting"],
-    summary="Get Groq Token Usage",
-    description="Check current Groq API token usage and rate limit status for entity extraction"
+    summary="Get Groq Rate Limiter Status",
+    description="Check current Groq API rate limiter status (RPM limit only, no daily token limit)"
 )
 async def get_groq_token_usage():
     """
-    Get Groq token usage status
+    Get Groq rate limiter status (RPM limit only)
+    Daily token limit has been removed - only RPM limit is enforced
     """
     try:
+        from src.core.rate_limiter import get_groq_rate_limiter
         from src.knowledge.entity_extractor import EntityExtractor
         
+        rate_limiter = get_groq_rate_limiter()
         extractor = EntityExtractor()
-        is_within_limit, tokens_used = await extractor._check_token_usage()
         
-        # Get rate limit status
+        # Get rate limiter stats
+        limiter_stats = rate_limiter.get_stats()
+        
+        # Get rate limit status (for RPM limits)
         rate_limit_status = cache_manager.get(extractor._get_rate_limit_key())
         
         return {
-            "tokens_used": tokens_used,
-            "daily_limit": extractor.daily_token_limit,
-            "tokens_remaining": max(0, extractor.daily_token_limit - tokens_used),
-            "usage_percentage": round((tokens_used / extractor.daily_token_limit) * 100, 2) if extractor.daily_token_limit > 0 else 0,
-            "is_within_limit": is_within_limit,
+            "rate_limiter": limiter_stats,
             "rate_limit_status": rate_limit_status,
-            "model": settings.groq_model
+            "rpm_limit": limiter_stats.get("max_requests", 5000),
+            "current_usage": limiter_stats.get("requests_in_window", 0),
+            "available_slots": limiter_stats.get("available_slots", 0),
+            "model": settings.groq_model,
+            "note": "Daily token limit removed - only RPM limit (6000) is enforced"
         }
+        
     except Exception as e:
-        logger.error(f"Error getting Groq token usage: {e}", exc_info=True)
+        logger.error(f"Error getting Groq rate limiter status: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get token usage: {str(e)}"
+            detail=f"Failed to get rate limiter status: {str(e)}"
         )
+
+
+@router.post(
+    "/groq/reset-token-usage",
+    tags=["Groq Rate Limiting"],
+    summary="Reset Token Usage (Deprecated)",
+    description="This endpoint is deprecated. Daily token limit has been removed. Only RPM limit is enforced."
+)
+async def reset_token_usage():
+    """
+    Deprecated endpoint - daily token limit has been removed
+    Only RPM limit (6000) is now enforced
+    """
+    return {
+        "status": "deprecated",
+        "message": "Daily token limit has been removed. Only RPM limit (6000) is enforced.",
+        "note": "This endpoint is kept for backward compatibility but does nothing."
+    }
 
 
 # Blog ingestion endpoints
@@ -669,9 +544,65 @@ async def ingest_blog_stream(request: BlogIngestRequest):
                         max_posts=request.max_posts,
                         progress_callback=progress_callback_internal
                     )
-                    await progress_queue.put({"type": "done", "result": result})
+                    # Check if result indicates an error
+                    if result.get("status") == "error":
+                        error_message = result.get("message", "Unknown error during ingestion")
+                        error_details = {
+                            "error": error_message,
+                            "error_type": "ingestion_error",
+                            "blog_name": request.blog_name,
+                            "details": result
+                        }
+                        await progress_queue.put({"type": "error", **error_details})
+                    else:
+                        await progress_queue.put({"type": "done", "result": result})
+                except httpx.HTTPStatusError as e:
+                    error_message = f"HTTP error {e.response.status_code}: {e.response.text[:200]}"
+                    if e.response.status_code == 404:
+                        error_message = f"RSS feed not found. Please check the URL: {request.blog_url}"
+                    elif e.response.status_code == 403:
+                        error_message = f"Access forbidden. The RSS feed may require authentication or be blocked."
+                    error_details = {
+                        "error": error_message,
+                        "error_type": "http_error",
+                        "status_code": e.response.status_code,
+                        "blog_name": request.blog_name,
+                        "feed_url": request.blog_url
+                    }
+                    await progress_queue.put({"type": "error", **error_details})
+                except httpx.TimeoutException as e:
+                    error_details = {
+                        "error": f"Request timeout. The RSS feed took too long to respond. Please check the URL: {request.blog_url}",
+                        "error_type": "timeout_error",
+                        "blog_name": request.blog_name,
+                        "feed_url": request.blog_url
+                    }
+                    await progress_queue.put({"type": "error", **error_details})
+                except httpx.RequestError as e:
+                    error_details = {
+                        "error": f"Network error: {str(e)}. Please check your internet connection and the RSS feed URL.",
+                        "error_type": "network_error",
+                        "blog_name": request.blog_name,
+                        "feed_url": request.blog_url
+                    }
+                    await progress_queue.put({"type": "error", **error_details})
+                except ValueError as e:
+                    error_details = {
+                        "error": f"Invalid RSS feed format: {str(e)}. The URL may not be a valid RSS feed.",
+                        "error_type": "validation_error",
+                        "blog_name": request.blog_name,
+                        "feed_url": request.blog_url
+                    }
+                    await progress_queue.put({"type": "error", **error_details})
                 except Exception as e:
-                    await progress_queue.put({"type": "error", "error": str(e)})
+                    error_details = {
+                        "error": f"Unexpected error: {str(e)}",
+                        "error_type": "unknown_error",
+                        "blog_name": request.blog_name,
+                        "feed_url": request.blog_url
+                    }
+                    logger.error(f"Error in blog ingestion: {e}", exc_info=True)
+                    await progress_queue.put({"type": "error", **error_details})
             
             ingestion_task = asyncio.create_task(run_ingestion())
             
@@ -684,7 +615,18 @@ async def ingest_blog_stream(request: BlogIngestRequest):
                         yield f"data: {json.dumps({'type': 'complete', 'result': final_result})}\n\n"
                         break
                     elif progress_data.get("type") == "error":
-                        yield f"data: {json.dumps({'type': 'error', 'error': progress_data.get('error')})}\n\n"
+                        yield f"data: {json.dumps({'type': 'error', **progress_data})}\n\n"
+                        break
+                    elif progress_data.get("error"):
+                        # Error flag in progress data (from progress callback)
+                        yield f"data: {json.dumps({
+                            'type': 'error',
+                            'error': progress_data.get('message', 'Unknown error'),
+                            'error_type': 'ingestion_error',
+                            'stage': progress_data.get('stage', 'unknown'),
+                            'blog_name': request.blog_name,
+                            'feed_url': request.blog_url
+                        })}\n\n"
                         break
                     else:
                         event = {
@@ -695,14 +637,29 @@ async def ingest_blog_stream(request: BlogIngestRequest):
                         
                 except asyncio.TimeoutError:
                     if ingestion_task.done():
+                        # Check if task completed with error
+                        try:
+                            await ingestion_task
+                        except Exception as e:
+                            yield f"data: {json.dumps({'type': 'error', 'error': str(e), 'error_type': 'task_error'})}\n\n"
                         break
                     continue
             
-            await ingestion_task
+            # Wait for task to complete
+            if not ingestion_task.done():
+                try:
+                    await asyncio.wait_for(ingestion_task, timeout=0.5)
+                except asyncio.TimeoutError:
+                    pass
             
         except Exception as e:
             logger.error(f"Error in blog ingestion stream: {e}", exc_info=True)
-            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+            error_details = {
+                "error": f"Stream error: {str(e)}",
+                "error_type": "stream_error",
+                "blog_name": request.blog_name if hasattr(request, 'blog_name') else "unknown"
+            }
+            yield f"data: {json.dumps({'type': 'error', **error_details})}\n\n"
     
     return StreamingResponse(
         generate_stream(),
@@ -809,6 +766,58 @@ async def list_blog_sources():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list blog sources: {str(e)}"
+        )
+
+
+@router.get(
+    "/blogs/check-duplicate",
+    tags=["Blog Management"],
+    summary="Check if Blog Already Exists",
+    description="Check if a blog has content in Pinecone. Blogs in configured sources will still be ingested."
+)
+async def check_blog_duplicate(
+    blog_name: str = Query(..., description="Name of the blog"),
+    blog_url: str = Query(..., description="RSS feed URL")
+):
+    """
+    Check if blog already has content in Pinecone
+    Only skips if content exists in Pinecone, not if it's just in configured sources
+    """
+    try:
+        from src.knowledge.vector_store import vector_store
+        
+        # Normalize URLs for comparison
+        normalized_url = blog_url.rstrip('/')
+        
+        # Check if blog exists in configured sources (informational only)
+        exists_in_sources = False
+        for blog_source in settings.blog_sources:
+            normalized_source_url = blog_source["url"].rstrip('/')
+            if (normalized_source_url == normalized_url or 
+                blog_source["name"].lower() == blog_name.lower()):
+                exists_in_sources = True
+                break
+        
+        # Check if blog has content in Pinecone (this is what matters for skipping)
+        stats = await vector_store.get_blog_stats(blog_name=blog_name)
+        has_content = stats.get("blog_vectors", 0) > 0
+        
+        return {
+            "exists": has_content,  # Only skip if content exists in Pinecone
+            "exists_in_sources": exists_in_sources,
+            "has_content_in_pinecone": has_content,
+            "message": (
+                "Blog content already exists in Pinecone" if has_content
+                else "Blog exists in configured sources but will be ingested" if exists_in_sources
+                else "Blog does not exist"
+            )
+        }
+        
+    except Exception as e:
+        logger.error(f"Error checking blog duplicate: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to check blog duplicate: {str(e)}"
         )
 
 

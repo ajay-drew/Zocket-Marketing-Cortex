@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { ingestBlogStream } from '../services/api';
+import React, { useState, useRef, useEffect } from 'react';
+import { ingestBlogStream, checkBlogDuplicate } from '../services/api';
 
 interface BlogIngestModalProps {
   onClose: () => void;
@@ -15,7 +15,38 @@ export const BlogIngestModal: React.FC<BlogIngestModalProps> = ({ onClose, onSuc
   const [progress, setProgress] = useState<string>('');
   const [progressPercent, setProgressPercent] = useState(0);
   const [currentPost, setCurrentPost] = useState<{ current?: number; total?: number }>({});
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  const [checkingDuplicate, setCheckingDuplicate] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Check for duplicates when blog name or URL changes
+  useEffect(() => {
+    const checkDuplicate = async () => {
+      if (blogName.trim() && blogUrl.trim()) {
+        setCheckingDuplicate(true);
+        try {
+          const result = await checkBlogDuplicate(blogName, blogUrl);
+          // Only warn if content exists in Pinecone (not just in configured sources)
+          if (result.exists && result.has_content_in_pinecone) {
+            setDuplicateWarning(result.message);
+          } else {
+            setDuplicateWarning(null);
+          }
+        } catch (err) {
+          // Silently fail duplicate check - don't block user
+          setDuplicateWarning(null);
+        } finally {
+          setCheckingDuplicate(false);
+        }
+      } else {
+        setDuplicateWarning(null);
+      }
+    };
+
+    // Debounce the check
+    const timeoutId = setTimeout(checkDuplicate, 500);
+    return () => clearTimeout(timeoutId);
+  }, [blogName, blogUrl]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,8 +119,37 @@ export const BlogIngestModal: React.FC<BlogIngestModalProps> = ({ onClose, onSuc
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-              <p className="text-sm text-red-800">{error}</p>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-start">
+                <svg className="w-5 h-5 text-red-600 mt-0.5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-red-800 mb-1">Error</p>
+                  <p className="text-sm text-red-700 whitespace-pre-wrap">{error}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {duplicateWarning && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-start">
+                <svg className="w-5 h-5 text-yellow-600 mt-0.5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-yellow-800 mb-1">Blog Already Exists</p>
+                  <p className="text-sm text-yellow-700">{duplicateWarning}</p>
+                  <p className="text-xs text-yellow-600 mt-1">You can still proceed, but this may create duplicate content.</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {checkingDuplicate && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-sm text-blue-700">Checking if blog already exists...</p>
             </div>
           )}
 

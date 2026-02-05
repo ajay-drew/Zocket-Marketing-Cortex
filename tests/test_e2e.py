@@ -128,58 +128,6 @@ class TestE2EAgentWorkflow:
             assert response.status_code in [200, 422]
 
 
-class TestE2ECampaignWorkflow:
-    """End-to-end tests for campaign management workflow"""
-    
-    def test_create_campaign_hierarchy(self):
-        """Test creating complete campaign hierarchy"""
-        # Step 1: Create campaign
-        campaign_response = client.post(
-            "/api/campaigns",
-            json={
-                "campaign_id": "e2e-campaign-1",
-                "name": "E2E Test Campaign",
-                "objective": "conversions",
-                "budget": 5000.0,
-                "start_date": "2024-01-01"
-            }
-        )
-        # May fail if Neo4j not available, but should not be 500 (internal error)
-        assert campaign_response.status_code in [200, 422, 500, 503]
-        
-        # Step 2: Create adset (only if campaign was created)
-        if campaign_response.status_code == 200:
-            adset_response = client.post(
-                "/api/adsets",
-                json={
-                    "adset_id": "e2e-adset-1",
-                    "campaign_id": "e2e-campaign-1",
-                    "name": "E2E Test AdSet",
-                    "targeting": {"age": "25-45", "location": "US"},
-                    "budget": 1000.0
-                }
-            )
-            assert adset_response.status_code in [200, 422, 500, 503]
-            
-            # Step 3: Create creative (only if adset was created)
-            if adset_response.status_code == 200:
-                creative_response = client.post(
-                    "/api/creatives",
-                    json={
-                        "creative_id": "e2e-creative-1",
-                        "adset_id": "e2e-adset-1",
-                        "name": "E2E Test Creative",
-                        "ad_copy": "Test ad copy for E2E testing"
-                    }
-                )
-                assert creative_response.status_code in [200, 422, 500, 503]
-                
-                # Step 4: Query campaign hierarchy
-                hierarchy_response = client.get("/api/campaigns/e2e-campaign-1")
-                # May return 404 if campaign wasn't actually created, but should not error
-                assert hierarchy_response.status_code in [200, 404, 500, 503]
-
-
 class TestE2EHealthChecks:
     """End-to-end health check tests"""
     

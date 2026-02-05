@@ -77,32 +77,3 @@ async def test_blog_ingestion_flow():
     assert response.status_code in [200, 422, 500, 503]
 
 
-def test_campaign_creation_flow():
-    """Test campaign creation flow"""
-    response = client.post(
-        "/api/campaigns",
-        json={
-            "campaign_id": "test-campaign-123",
-            "name": "Test Campaign",
-            "objective": "awareness",
-            "budget": 1000.0,
-            "start_date": "2024-01-01"
-        }
-    )
-    
-    # Should either succeed, return validation error, or service unavailable
-    # 500 is acceptable if Neo4j is not available
-    assert response.status_code in [200, 422, 500, 503]
-
-
-def test_high_performers_endpoint():
-    """Test high performers query endpoint"""
-    response = client.get("/api/high-performers?min_roas=2.0&limit=10")
-    # May fail with 500 due to Neo4j event loop issues in test environment
-    # This is a test environment issue, not a code bug
-    assert response.status_code in [200, 500]
-    if response.status_code == 200:
-        data = response.json()
-        assert "results" in data
-        # Response has 'results' key, not 'count'
-        assert isinstance(data['results'], list)

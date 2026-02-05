@@ -5,7 +5,7 @@ Implements Agentic RAG with query refinement and multi-source synthesis
 from typing import AsyncIterator, Dict, Any, Optional, List, TypedDict, Annotated
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
-from langchain_groq import ChatGroq
+from src.core.groq_rate_limited import RateLimitedChatGroq as ChatGroq
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
@@ -16,11 +16,12 @@ from src.knowledge.vector_store import vector_store
 from src.core.memory import memory_manager
 from src.observability import (
     trace_agent_execution,
-    trace_with_langfuse,
     get_structured_logger,
     set_session_id,
     get_alert_manager
 )
+from src.observability.langsmith_config import get_langsmith_tracer
+from langchain_core.callbacks import CallbackManager
 import logging
 import json
 import time
@@ -749,7 +750,7 @@ Always include citations (URLs) for each insight."""
     async def get_memory_context(self, session_id: str) -> List:
         """Get conversation history from Zep memory"""
         try:
-            memory = memory_manager.get_memory(session_id)
+            memory = await memory_manager.get_memory_async(session_id)
             if not memory:
                 return []
             
@@ -768,7 +769,6 @@ Always include citations (URLs) for each insight."""
             return []
     
     @trace_agent_execution
-    @trace_with_langfuse
     async def stream_response(
         self,
         query: str,
@@ -809,8 +809,16 @@ Always include citations (URLs) for each insight."""
                 "tool_call_events": []
             }
             
-            # Run workflow
-            final_state = await self.workflow.ainvoke(initial_state)
+            # Run workflow with LangSmith tracing
+            # Get LangSmith tracer for automatic tracing of all nodes
+            tracer = get_langsmith_tracer()
+            config = {}
+            if tracer:
+                callback_manager = CallbackManager([tracer])
+                config = {"callbacks": callback_manager}
+                logger.debug(f"[LangSmith] Tracing workflow execution with callbacks - Session: {session_id}")
+            
+            final_state = await self.workflow.ainvoke(initial_state, config=config)
             
             # Stream tool call events (reasoning steps)
             for event in final_state.get("tool_call_events", []):

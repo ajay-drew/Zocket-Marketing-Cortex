@@ -1,11 +1,12 @@
 """
 LangSmith integration for observability and tracing
-Primary observability platform for agent execution tracking
+Provides automatic tracing of LLM calls, tool invocations, and agent workflows
 """
 import os
 import logging
 from typing import Optional, Dict, Any, Callable
 from functools import wraps
+import inspect
 from langsmith import Client
 from langchain_core.tracers import LangChainTracer
 from langchain_core.callbacks import CallbackManager
@@ -13,14 +14,14 @@ from src.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Global LangSmith client instance
+# Global LangSmith client and tracer instances
 _langsmith_client: Optional[Client] = None
 _langsmith_tracer: Optional[LangChainTracer] = None
 
 
 def get_langsmith_client() -> Optional[Client]:
     """
-    Get or create LangSmith client instance
+    Get or create LangSmith client
     
     Returns:
         LangSmith Client instance or None if not configured
@@ -92,42 +93,85 @@ def trace_agent_execution(func: Callable) -> Callable:
     Returns:
         Wrapped function with tracing
     """
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        if not settings.enable_langsmith:
-            return await func(*args, **kwargs)
-        
-        tracer = get_langsmith_tracer()
-        if not tracer:
-            return await func(*args, **kwargs)
-        
-        # Extract query and session_id for trace metadata
-        query = kwargs.get("query", args[1] if len(args) > 1 else "unknown")
-        session_id = kwargs.get("session_id", args[2] if len(args) > 2 else "unknown")
-        
-        try:
-            # Create callback manager with LangSmith tracer
-            callback_manager = CallbackManager([tracer])
+    # Check if function is an async generator
+    is_async_gen = inspect.isasyncgenfunction(func)
+    
+    if is_async_gen:
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            if not settings.enable_langsmith:
+                async for item in func(*args, **kwargs):
+                    yield item
+                return
             
-            # Add callbacks to kwargs if function accepts it
-            if "callbacks" in kwargs:
-                kwargs["callbacks"] = callback_manager
-            elif hasattr(args[0], "callbacks"):
-                # For agent methods, set callbacks on the agent instance
-                pass
+            tracer = get_langsmith_tracer()
+            if not tracer:
+                async for item in func(*args, **kwargs):
+                    yield item
+                return
             
-            logger.debug(f"[LangSmith] Tracing agent execution - Query: {query[:50]}..., Session: {session_id}")
+            # Extract query and session_id for trace metadata
+            query = kwargs.get("query", args[1] if len(args) > 1 else "unknown")
+            session_id = kwargs.get("session_id", args[2] if len(args) > 2 else "unknown")
             
-            # Execute function with tracing
-            result = await func(*args, **kwargs)
+            try:
+                # Create callback manager with LangSmith tracer
+                callback_manager = CallbackManager([tracer])
+                
+                # Add callbacks to kwargs if function accepts it
+                if "callbacks" in kwargs:
+                    kwargs["callbacks"] = callback_manager
+                elif hasattr(args[0], "callbacks"):
+                    # For agent methods, set callbacks on the agent instance
+                    pass
+                
+                logger.debug(f"[LangSmith] Tracing agent execution - Query: {query[:50]}..., Session: {session_id}")
+                
+                # For async generators, yield from the generator
+                async for item in func(*args, **kwargs):
+                    yield item
+                
+            except Exception as e:
+                logger.error(f"[LangSmith] Error during agent execution trace: {e}", exc_info=True)
+                # Still execute function even if tracing fails
+                async for item in func(*args, **kwargs):
+                    yield item
+    else:
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            if not settings.enable_langsmith:
+                return await func(*args, **kwargs)
             
-            logger.debug(f"[LangSmith] Agent execution completed - Session: {session_id}")
-            return result
+            tracer = get_langsmith_tracer()
+            if not tracer:
+                return await func(*args, **kwargs)
             
-        except Exception as e:
-            logger.error(f"[LangSmith] Error during agent execution trace: {e}", exc_info=True)
-            # Still execute function even if tracing fails
-            return await func(*args, **kwargs)
+            # Extract query and session_id for trace metadata
+            query = kwargs.get("query", args[1] if len(args) > 1 else "unknown")
+            session_id = kwargs.get("session_id", args[2] if len(args) > 2 else "unknown")
+            
+            try:
+                # Create callback manager with LangSmith tracer
+                callback_manager = CallbackManager([tracer])
+                
+                # Add callbacks to kwargs if function accepts it
+                if "callbacks" in kwargs:
+                    kwargs["callbacks"] = callback_manager
+                elif hasattr(args[0], "callbacks"):
+                    # For agent methods, set callbacks on the agent instance
+                    pass
+                
+                logger.debug(f"[LangSmith] Tracing agent execution - Query: {query[:50]}..., Session: {session_id}")
+                
+                # For regular async functions, await and return
+                result = await func(*args, **kwargs)
+                logger.debug(f"[LangSmith] Agent execution completed - Session: {session_id}")
+                return result
+                
+            except Exception as e:
+                logger.error(f"[LangSmith] Error during agent execution trace: {e}", exc_info=True)
+                # Still execute function even if tracing fails
+                return await func(*args, **kwargs)
     
     return wrapper
 
@@ -138,64 +182,19 @@ def log_tool_call(tool_name: str, query: str, result: Any, duration: float, sess
     
     Args:
         tool_name: Name of the tool
-        query: Query string
+        query: Query that triggered the tool
         result: Tool result
         duration: Execution duration in seconds
-        session_id: Session ID
+        session_id: Session identifier
     """
-    if not settings.enable_langsmith:
-        return
-    
-    client = get_langsmith_client()
-    if not client:
-        return
-    
     try:
-        # Log tool call as a run
-        client.create_run(
-            name=f"tool_{tool_name}",
-            run_type="tool",
-            inputs={"query": query},
-            outputs={"result": str(result)[:500]},  # Truncate long results
-            extra={"duration": duration, "session_id": session_id}
+        client = get_langsmith_client()
+        if not client:
+            return
+        
+        # Log tool call metadata
+        logger.debug(
+            f"[LangSmith] Tool call: {tool_name} - Duration: {duration:.2f}s - Session: {session_id}"
         )
-        logger.debug(f"[LangSmith] Logged tool call: {tool_name}")
     except Exception as e:
-        logger.warning(f"[LangSmith] Failed to log tool call: {e}")
-
-
-def log_llm_call(prompt: str, response: str, model: str, tokens: int, duration: float, session_id: str):
-    """
-    Log LLM call to LangSmith
-    
-    Args:
-        prompt: Input prompt
-        response: LLM response
-        model: Model name
-        tokens: Token count
-        duration: Execution duration in seconds
-        session_id: Session ID
-    """
-    if not settings.enable_langsmith:
-        return
-    
-    client = get_langsmith_client()
-    if not client:
-        return
-    
-    try:
-        client.create_run(
-            name="llm_call",
-            run_type="llm",
-            inputs={"prompt": prompt[:1000]},  # Truncate long prompts
-            outputs={"response": response[:1000]},  # Truncate long responses
-            extra={
-                "model": model,
-                "tokens": tokens,
-                "duration": duration,
-                "session_id": session_id
-            }
-        )
-        logger.debug(f"[LangSmith] Logged LLM call: {model}")
-    except Exception as e:
-        logger.warning(f"[LangSmith] Failed to log LLM call: {e}")
+        logger.error(f"Error logging tool call to LangSmith: {e}")

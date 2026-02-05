@@ -210,4 +210,18 @@ node_modules/
 .cursor/
 .cursorignore
 .cursorindexingignore
-.cursorignore   
+.cursorignore
+
+# Frontend build output
+frontend/dist/
+frontend/node_modules/
+
+# Evaluation results (generated files)
+eval.json
+evaluation_results.json
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~

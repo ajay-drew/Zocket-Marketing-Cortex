@@ -1,107 +1,37 @@
-"""Evaluation metrics for agent responses"""
+"""Fast evaluation metrics for agent responses: Relevance and ROUGE (no LLM judge)"""
 
 import re
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 import logging
 
 try:
-    from bert_score import score as bert_score
-    BERTSCORE_AVAILABLE = True
+    from rouge_score import rouge_scorer
+    ROUGE_AVAILABLE = True
 except ImportError:
-    BERTSCORE_AVAILABLE = False
-    logging.warning("bert-score not installed. Relevance metric will use fallback method.")
+    ROUGE_AVAILABLE = False
+    logging.warning("rouge-score not installed. ROUGE metrics will not be available.")
 
 logger = logging.getLogger(__name__)
 
 
 class EvaluationMetrics:
-    """Evaluation metrics for agent responses"""
+    """Fast evaluation metrics for agent responses - no LLM judge"""
     
-    def __init__(self, use_bert_score: bool = True):
+    def __init__(self, use_bert_score: bool = False):
         """
         Initialize evaluation metrics
         
         Args:
-            use_bert_score: Whether to use BERTScore for relevance (requires bert-score package)
+            use_bert_score: Whether to use BERTScore (slower). Default False for speed.
         """
-        self.use_bert_score = use_bert_score and BERTSCORE_AVAILABLE
-        if use_bert_score and not BERTSCORE_AVAILABLE:
-            logger.warning("BERTScore not available. Using fallback semantic similarity.")
-    
-    def extract_citations(self, text: str) -> List[str]:
-        """
-        Extract URLs from response text
+        self.use_bert_score = False  # Always use fast word overlap for speed
         
-        Args:
-            text: Response text to extract citations from
-            
-        Returns:
-            List of URLs found in the text
-        """
-        url_pattern = r'(https?://[^\s\)]+)'
-        matches = re.findall(url_pattern, text)
-        # Clean up URLs (remove trailing punctuation)
-        cleaned_urls = [url.rstrip('.,;:!?)') for url in matches]
-        return cleaned_urls
-    
-    def calculate_citation_accuracy(
-        self, 
-        response: str, 
-        expected_sources: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
-        """
-        Calculate citation accuracy metrics
-        
-        Args:
-            response: Agent response text
-            expected_sources: Optional list of expected source URLs
-            
-        Returns:
-            Dictionary with citation accuracy metrics
-        """
-        citations = self.extract_citations(response)
-        
-        metrics = {
-            "citation_count": len(citations),
-            "has_citations": len(citations) > 0,
-            "citations": citations,
-        }
-        
-        # If expected sources provided, calculate precision/recall
-        if expected_sources:
-            expected_set = set(expected_sources)
-            found_set = set(citations)
-            
-            # Precision: citations that are in expected sources
-            if len(found_set) > 0:
-                precision = len(found_set & expected_set) / len(found_set)
-            else:
-                precision = 0.0
-            
-            # Recall: expected sources that were cited
-            if len(expected_set) > 0:
-                recall = len(found_set & expected_set) / len(expected_set)
-            else:
-                recall = 0.0
-            
-            # F1 score
-            if precision + recall > 0:
-                f1 = 2 * (precision * recall) / (precision + recall)
-            else:
-                f1 = 0.0
-            
-            metrics.update({
-                "precision": precision,
-                "recall": recall,
-                "f1": f1,
-                "expected_sources": expected_sources,
-            })
-        
-        # Citation coverage: percentage of response that has citations
-        # Simple heuristic: if response has citations, consider it covered
-        metrics["citation_coverage"] = 1.0 if len(citations) > 0 else 0.0
-        
-        return metrics
+        # Initialize ROUGE scorer
+        if ROUGE_AVAILABLE:
+            self.rouge_scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
+        else:
+            self.rouge_scorer = None
+            logger.warning("ROUGE scorer not available. Install rouge-score package.")
     
     def calculate_relevance(
         self, 
@@ -109,7 +39,7 @@ class EvaluationMetrics:
         ground_truth: str
     ) -> Dict[str, Any]:
         """
-        Calculate relevance score using BERTScore or fallback method
+        Calculate relevance score using fast word overlap (no LLM)
         
         Args:
             response: Agent response text
@@ -118,45 +48,7 @@ class EvaluationMetrics:
         Returns:
             Dictionary with relevance metrics
         """
-        if self.use_bert_score:
-            try:
-                # BERTScore calculation
-                P, R, F1 = bert_score(
-                    [response],
-                    [ground_truth],
-                    lang='en',
-                    verbose=False,
-                    device='cpu'  # Use CPU for compatibility
-                )
-                
-                return {
-                    "relevance_score": float(F1[0].item()),
-                    "precision": float(P[0].item()),
-                    "recall": float(R[0].item()),
-                    "method": "bert_score",
-                }
-            except Exception as e:
-                logger.warning(f"BERTScore calculation failed: {e}. Using fallback.")
-                return self._calculate_relevance_fallback(response, ground_truth)
-        else:
-            return self._calculate_relevance_fallback(response, ground_truth)
-    
-    def _calculate_relevance_fallback(
-        self, 
-        response: str, 
-        ground_truth: str
-    ) -> Dict[str, Any]:
-        """
-        Fallback relevance calculation using simple word overlap
-        
-        Args:
-            response: Agent response text
-            ground_truth: Expected/ideal response text
-            
-        Returns:
-            Dictionary with relevance metrics
-        """
-        # Simple word-based similarity (Jaccard similarity)
+        # Fast word-based similarity (Jaccard similarity)
         response_words = set(response.lower().split())
         ground_truth_words = set(ground_truth.lower().split())
         
@@ -192,55 +84,100 @@ class EvaluationMetrics:
             "method": "word_overlap",
         }
     
+    def calculate_rouge_scores(
+        self,
+        response: str,
+        ground_truth: str
+    ) -> Dict[str, Any]:
+        """
+        Calculate ROUGE scores for summary evaluation (fast, no LLM)
+        
+        Args:
+            response: Agent response text (summary)
+            ground_truth: Expected/ideal response text (reference summary)
+            
+        Returns:
+            Dictionary with ROUGE metrics (ROUGE-1, ROUGE-2, ROUGE-L)
+        """
+        if not self.rouge_scorer:
+            return {
+                "rouge1": {"f": 0.0, "p": 0.0, "r": 0.0},
+                "rouge2": {"f": 0.0, "p": 0.0, "r": 0.0},
+                "rougeL": {"f": 0.0, "p": 0.0, "r": 0.0},
+                "available": False,
+            }
+        
+        try:
+            scores = self.rouge_scorer.score(ground_truth, response)
+            
+            return {
+                "rouge1": {
+                    "f": scores['rouge1'].fmeasure,
+                    "p": scores['rouge1'].precision,
+                    "r": scores['rouge1'].recall,
+                },
+                "rouge2": {
+                    "f": scores['rouge2'].fmeasure,
+                    "p": scores['rouge2'].precision,
+                    "r": scores['rouge2'].recall,
+                },
+                "rougeL": {
+                    "f": scores['rougeL'].fmeasure,
+                    "p": scores['rougeL'].precision,
+                    "r": scores['rougeL'].recall,
+                },
+                "available": True,
+            }
+        except Exception as e:
+            logger.warning(f"ROUGE calculation failed: {e}")
+            return {
+                "rouge1": {"f": 0.0, "p": 0.0, "r": 0.0},
+                "rouge2": {"f": 0.0, "p": 0.0, "r": 0.0},
+                "rougeL": {"f": 0.0, "p": 0.0, "r": 0.0},
+                "available": False,
+                "error": str(e),
+            }
+    
     def evaluate(
         self,
         response: str,
         ground_truth: str,
-        expected_sources: Optional[List[str]] = None
+        expected_sources: Optional[list] = None,
+        response_time: Optional[float] = None
     ) -> Dict[str, Any]:
         """
-        Comprehensive evaluation of agent response
+        Fast evaluation using only Relevance and ROUGE (no LLM judge)
         
         Args:
             response: Agent response text
             ground_truth: Expected/ideal response text
-            expected_sources: Optional list of expected source URLs
+            expected_sources: Optional (not used)
+            response_time: Optional response time in seconds
             
         Returns:
-            Dictionary with all evaluation metrics
+            Dictionary with evaluation metrics
         """
+        # Calculate both metrics
         relevance_metrics = self.calculate_relevance(response, ground_truth)
-        citation_metrics = self.calculate_citation_accuracy(response, expected_sources)
+        rouge_metrics = self.calculate_rouge_scores(response, ground_truth)
         
-        # Overall score (weighted combination)
-        relevance_weight = 0.7
-        citation_weight = 0.3
-        
-        citation_score = citation_metrics.get("citation_coverage", 0.0)
-        if expected_sources and "f1" in citation_metrics:
-            citation_score = citation_metrics["f1"]
-        
-        overall_score = (
-            relevance_metrics["relevance_score"] * relevance_weight +
-            citation_score * citation_weight
-        )
-        
-        return {
-            "overall_score": overall_score,
+        result = {
             "relevance": relevance_metrics,
-            "citation_accuracy": citation_metrics,
-            "meets_threshold": (
-                relevance_metrics["relevance_score"] >= 0.85 and
-                citation_metrics["has_citations"]
-            ),
+            "rouge": rouge_metrics,
         }
+        
+        if response_time is not None:
+            result["response_time"] = response_time
+        
+        return result
 
 
 def evaluate_response(
     response: str,
     ground_truth: str,
-    expected_sources: Optional[List[str]] = None,
-    use_bert_score: bool = True
+    expected_sources: Optional[list] = None,
+    use_bert_score: bool = False,
+    response_time: Optional[float] = None
 ) -> Dict[str, Any]:
     """
     Convenience function to evaluate a single response
@@ -248,11 +185,12 @@ def evaluate_response(
     Args:
         response: Agent response text
         ground_truth: Expected/ideal response text
-        expected_sources: Optional list of expected source URLs
-        use_bert_score: Whether to use BERTScore for relevance
+        expected_sources: Optional (not used)
+        use_bert_score: Whether to use BERTScore (ignored, always uses fast method)
+        response_time: Optional response time in seconds
         
     Returns:
         Dictionary with evaluation metrics
     """
-    metrics = EvaluationMetrics(use_bert_score=use_bert_score)
-    return metrics.evaluate(response, ground_truth, expected_sources)
+    metrics = EvaluationMetrics(use_bert_score=False)
+    return metrics.evaluate(response, ground_truth, expected_sources, response_time=response_time)

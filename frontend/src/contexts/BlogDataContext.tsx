@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { getBlogSources, BlogSource } from '../services/api';
 
 interface BlogDataContextType {
@@ -25,6 +25,7 @@ export const BlogDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastFetched, setLastFetched] = useState<number | null>(null);
+  const isFetchingRef = useRef(false);
 
   const loadFromCache = useCallback((): BlogSource[] | null => {
     try {
@@ -57,6 +58,11 @@ export const BlogDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   const fetchBlogSources = useCallback(async (forceRefresh = false) => {
+    // Prevent concurrent fetches
+    if (isFetchingRef.current && !forceRefresh) {
+      return;
+    }
+
     // Check cache first if not forcing refresh
     if (!forceRefresh) {
       const cached = loadFromCache();
@@ -64,15 +70,13 @@ export const BlogDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setSources(cached);
         setLoading(false);
         setError(null);
-        // Try to refresh in background
-        fetchBlogSources(true).catch(() => {
-          // Silent fail for background refresh
-        });
+        // Don't trigger background refresh here to avoid infinite loop
         return;
       }
     }
 
     try {
+      isFetchingRef.current = true;
       setLoading(true);
       setError(null);
       const response = await getBlogSources();
@@ -90,6 +94,7 @@ export const BlogDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
   }, [loadFromCache, saveToCache]);
 
@@ -103,10 +108,50 @@ export const BlogDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     fetchBlogSources(true);
   }, [fetchBlogSources]);
 
-  // Initial load
+  // Initial load - only run once on mount
   useEffect(() => {
     fetchBlogSources(false);
-  }, [fetchBlogSources]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only run on mount
+
+  // Auto-refresh when window regains focus (e.g., after batch ingestion script runs)
+  useEffect(() => {
+    const handleFocus = () => {
+      // Only refresh if not already loading and cache is stale
+      if (!isFetchingRef.current && !loading) {
+        const cached = loadFromCache();
+        const now = Date.now();
+        // Check if cache is stale (older than TTL)
+        if (!cached || (lastFetched && now - lastFetched > CACHE_TTL)) {
+          fetchBlogSources(true).catch(() => {
+            // Silent fail for background refresh
+          });
+        }
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loading, loadFromCache, lastFetched, fetchBlogSources]);
+
+  // Periodic refresh every 30 seconds (to catch batch ingestion updates)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Only refresh if not already loading/fetching and cache is stale
+      if (!isFetchingRef.current && !loading) {
+        const cached = loadFromCache();
+        const now = Date.now();
+        // Check if cache is stale (older than TTL)
+        if (!cached || (lastFetched && now - lastFetched > CACHE_TTL)) {
+          fetchBlogSources(true).catch(() => {
+            // Silent fail for background refresh
+          });
+        }
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [loading, loadFromCache, lastFetched, fetchBlogSources]);
 
   const value: BlogDataContextType = {
     sources,

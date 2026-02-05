@@ -5,6 +5,7 @@ import redis
 from typing import Optional, Any
 import json
 import logging
+import asyncio
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,27 @@ class CacheManager:
             logger.error(f"Make sure REDIS_URL is in format: rediss://default:PASSWORD@ENDPOINT.upstash.io:6379")
             self.redis_client = None
     
+    async def ping(self) -> bool:
+        """
+        Ping Redis to check connection (async - non-blocking)
+        
+        Returns:
+            True if connection is healthy, False otherwise
+        """
+        if not self.redis_client:
+            return False
+        
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self.redis_client.ping()
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Redis ping error: {e}")
+            return False
+    
     def disconnect(self):
         """Close Redis connection"""
         if self.redis_client:
@@ -42,7 +64,7 @@ class CacheManager:
     
     def get(self, key: str) -> Optional[Any]:
         """
-        Retrieve value from cache
+        Retrieve value from cache (synchronous - for backward compatibility)
         
         Args:
             key: Cache key
@@ -64,6 +86,34 @@ class CacheManager:
             logger.error(f"Cache get error: {e}")
             return None
     
+    async def aget(self, key: str) -> Optional[Any]:
+        """
+        Retrieve value from cache (async - non-blocking)
+        
+        Args:
+            key: Cache key
+            
+        Returns:
+            Cached value or None if not found
+        """
+        if not self.redis_client:
+            return None
+        
+        try:
+            loop = asyncio.get_event_loop()
+            value = await loop.run_in_executor(
+                None,
+                lambda: self.redis_client.get(key)
+            )
+            if value:
+                logger.debug(f"Cache hit: {key}")
+                return json.loads(value)
+            logger.debug(f"Cache miss: {key}")
+            return None
+        except Exception as e:
+            logger.error(f"Cache get error: {e}")
+            return None
+    
     def set(
         self,
         key: str,
@@ -71,7 +121,7 @@ class CacheManager:
         ttl: Optional[int] = None
     ) -> bool:
         """
-        Store value in cache
+        Store value in cache (synchronous - for backward compatibility)
         
         Args:
             key: Cache key
@@ -90,6 +140,43 @@ class CacheManager:
                 key,
                 ttl or self.default_ttl,
                 serialized
+            )
+            logger.debug(f"Cached: {key} (TTL: {ttl or self.default_ttl}s)")
+            return True
+        except Exception as e:
+            logger.error(f"Cache set error: {e}")
+            return False
+    
+    async def aset(
+        self,
+        key: str,
+        value: Any,
+        ttl: Optional[int] = None
+    ) -> bool:
+        """
+        Store value in cache (async - non-blocking)
+        
+        Args:
+            key: Cache key
+            value: Value to cache
+            ttl: Time to live in seconds (default: 1 hour)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.redis_client:
+            return False
+        
+        try:
+            serialized = json.dumps(value)
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self.redis_client.setex(
+                    key,
+                    ttl or self.default_ttl,
+                    serialized
+                )
             )
             logger.debug(f"Cached: {key} (TTL: {ttl or self.default_ttl}s)")
             return True

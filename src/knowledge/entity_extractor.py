@@ -3,7 +3,7 @@ Entity Extraction Module for Marketing Blog Content
 Extracts marketing entities and relationships using LLM
 """
 from typing import List, Dict, Any, Optional, Tuple
-from langchain_groq import ChatGroq
+from src.core.groq_rate_limited import RateLimitedChatGroq as ChatGroq
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 from src.config import settings
@@ -69,13 +69,13 @@ class EntityExtractor:
             temperature=0.1,  # Low temperature for consistent extraction
             groq_api_key=settings.groq_api_key
         )
-        # Semaphore to limit concurrent entity extraction requests (max 3 at a time)
-        self._extraction_semaphore = asyncio.Semaphore(3)
-        # Groq rate limits: 100,000 tokens per day (on-demand tier)
-        self.daily_token_limit = 100000
+        # Semaphore to limit concurrent entity extraction requests (reduced to 1 to avoid rate limits)
+        # When processing many chunks, even 2-3 concurrent requests can hit rate limits quickly
+        self._extraction_semaphore = asyncio.Semaphore(1)
+        # Only RPM limit enforced (6000 RPM), no daily token limit
         self.rate_limit_retry_attempts = 3
         self.rate_limit_base_delay = 1.0  # Base delay in seconds
-        logger.info("EntityExtractor initialized with rate limiting")
+        logger.info("EntityExtractor initialized with RPM rate limiting (no daily token limit)")
     
     @staticmethod
     def _generate_entity_id(entity_name: str, entity_type: str) -> str:
@@ -86,53 +86,9 @@ class EntityExtractor:
         hash_str = hashlib.md5(f"{entity_type}:{entity_name}".encode()).hexdigest()[:8]
         return f"{entity_type}_{normalized}_{hash_str}"
     
-    def _get_daily_token_key(self) -> str:
-        """Get Redis key for daily token usage tracking"""
-        today = datetime.utcnow().strftime("%Y-%m-%d")
-        return f"groq:token_usage:{today}"
-    
     def _get_rate_limit_key(self) -> str:
         """Get Redis key for rate limit status"""
         return "groq:rate_limit:status"
-    
-    async def _check_token_usage(self) -> Tuple[bool, int]:
-        """
-        Check current daily token usage
-        
-        Returns:
-            Tuple of (is_within_limit, tokens_used)
-        """
-        try:
-            key = self._get_daily_token_key()
-            usage_str = cache_manager.get(key)
-            tokens_used = int(usage_str) if usage_str else 0
-            
-            # Check if we're close to limit (90% threshold)
-            threshold = int(self.daily_token_limit * 0.9)
-            is_within_limit = tokens_used < threshold
-            
-            return is_within_limit, tokens_used
-        except Exception as e:
-            logger.warning(f"Error checking token usage: {e}")
-            # On error, assume we're within limit
-            return True, 0
-    
-    async def _increment_token_usage(self, tokens: int):
-        """Increment daily token usage counter"""
-        try:
-            key = self._get_daily_token_key()
-            current = cache_manager.get(key) or "0"
-            new_total = int(current) + tokens
-            
-            # Store with TTL until end of day (UTC)
-            now = datetime.utcnow()
-            end_of_day = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-            ttl = int((end_of_day - now).total_seconds())
-            
-            cache_manager.set(key, str(new_total), ttl=ttl)
-            logger.debug(f"Token usage updated: {new_total}/{self.daily_token_limit}")
-        except Exception as e:
-            logger.warning(f"Error incrementing token usage: {e}")
     
     async def _handle_rate_limit_error(self, error: Exception, attempt: int) -> bool:
         """
@@ -169,14 +125,21 @@ class EntityExtractor:
             f"Retrying after {retry_after:.1f}s..."
         )
         
-        # Mark rate limit status in cache
+        # Mark rate limit status in cache (with longer TTL to prevent other extractions)
+        # This prevents other concurrent extractions from also hitting the limit
         cache_manager.set(
             self._get_rate_limit_key(),
-            {"hit_at": datetime.utcnow().isoformat(), "retry_after": retry_after},
-            ttl=int(retry_after) + 60
+            {"hit_at": datetime.utcnow().isoformat(), "retry_after": retry_after, "attempt": attempt},
+            ttl=int(retry_after) + 300  # Keep status for retry time + 5 minutes
         )
         
-        await asyncio.sleep(retry_after)
+        # If this is the first attempt, wait longer to let rate limit reset
+        if attempt == 1:
+            # Wait longer on first rate limit to give API time to reset
+            await asyncio.sleep(min(retry_after, 60))  # Max 60s on first retry
+        else:
+            await asyncio.sleep(retry_after)
+        
         return attempt < self.rate_limit_retry_attempts
     
     async def extract_entities(
@@ -196,17 +159,19 @@ class EntityExtractor:
         Returns:
             ExtractionResult with entities and relationships
         """
-        # Check if we're within token limits
-        is_within_limit, tokens_used = await self._check_token_usage()
-        if not is_within_limit:
-            logger.warning(
-                f"Token usage limit approaching: {tokens_used}/{self.daily_token_limit}. "
-                f"Skipping entity extraction to avoid rate limit."
-            )
-            return ExtractionResult()
+        # Check rate limit status before attempting extraction
+        rate_limit_status = cache_manager.get(self._get_rate_limit_key())
+        if rate_limit_status:
+            logger.debug("Rate limit recently hit, skipping extraction to avoid further limits")
+            return ExtractionResult(entities=[], relationships=[])
         
-        # Use semaphore to limit concurrent extractions
+        # Use semaphore to limit concurrent extractions (only 1 at a time to avoid rate limits)
+        # No daily token limit check - only RPM limit enforced
+        # Add delay before acquiring semaphore to spread out requests and avoid rate limits
+        await asyncio.sleep(0.2)  # Increased delay to prevent burst requests
         async with self._extraction_semaphore:
+            # Additional delay after acquiring semaphore to ensure rate limit compliance
+            await asyncio.sleep(0.1)
             # Limit content length for LLM processing
             content_preview = content[:2000] if len(content) > 2000 else content
             
@@ -257,9 +222,7 @@ Be conservative with confidence scores. Only include relationships if there's cl
                     response = await self.llm.ainvoke([HumanMessage(content=extraction_prompt)])
                     response_text = response.content
                     
-                    # Estimate token usage (rough: ~4 chars per token)
-                    estimated_tokens = len(extraction_prompt + response_text) // 4
-                    await self._increment_token_usage(estimated_tokens)
+                    # Token tracking removed - only RPM limit enforced
                     
                     # Parse JSON from response - look for JSON object with nested structures
                     json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response_text, re.DOTALL)

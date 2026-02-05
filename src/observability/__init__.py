@@ -1,9 +1,8 @@
 """
 Observability module for Marketing Cortex
-Provides LangSmith, Langfuse, structured logging, circuit breakers, retry logic, and alerting
+Provides LangSmith, structured logging, circuit breakers, retry logic, and alerting
 """
 from src.observability.langsmith_config import get_langsmith_client, trace_agent_execution
-from src.observability.langfuse_config import get_langfuse_client, trace_with_langfuse
 from src.observability.logging_config import (
     get_structured_logger,
     setup_structured_logging,
@@ -19,8 +18,6 @@ from src.observability.alerting import AlertManager, get_alert_manager
 __all__ = [
     "get_langsmith_client",
     "trace_agent_execution",
-    "get_langfuse_client",
-    "trace_with_langfuse",
     "get_structured_logger",
     "setup_structured_logging",
     "set_request_id",

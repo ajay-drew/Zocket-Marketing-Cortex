@@ -67,7 +67,7 @@ class VectorStore:
                         "indexed": ["query", "title", "url"]
                     }
                 )
-                # Wait for index to be ready
+                # Wait for index to be ready (only called during init, so sync is OK)
                 import time
                 time.sleep(2)
                 return self.pc.Index(self.index_name)

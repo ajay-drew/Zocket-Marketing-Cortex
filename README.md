@@ -1,6 +1,6 @@
 # Marketing Cortex - Multi-Agent AI System
 
-**Production-grade multi-agent AI system for Zocket's ad tech ecosystem**
+**Multi-agent AI system for Zocket's ad tech ecosystem**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-green.svg)](https://fastapi.tiangolo.com/)
@@ -8,12 +8,43 @@
 
 ## 🎯 Overview
 
-Marketing Cortex (ZMC) is a sophisticated multi-agent AI system that orchestrates specialized agents to deliver end-to-end marketing intelligence:
+Marketing Cortex (ZMC) orchestrates specialized AI agents to deliver end-to-end marketing intelligence through multi-step reasoning, hybrid RAG (Graph + Vector), and real-time web search.
 
-- **Multi-Agent Orchestration**: Supervisor-driven architecture with specialized agents
-- **Graph RAG & Agentic RAG**: Hybrid knowledge retrieval (Neo4j + Pinecone + Tavily)
-- **Production Observability**: LangSmith tracing and comprehensive evaluation metrics
-- **Real-World Integration**: Meta/Google Ads APIs, Creative Studio, Snoop AI
+## 🏗️ Architecture
+
+![System Architecture](System%20Archi.png)
+
+The system follows a LangGraph-based workflow orchestration pattern with four specialized tools integrated via LangChain StructuredTools.
+
+## 📝 Technical Write-up
+
+### Tools & Technologies
+
+Marketing Cortex leverages a modern AI agent stack built on **LangGraph** for multi-step workflow orchestration, enabling conditional routing between six workflow nodes (query_analysis → tool_selection → execute_tools → evaluate_results → refine_query → synthesize). **LangChain** provides the abstraction layer for LLM integration and tool binding, with **Groq's Llama-3.1-8B-instant** serving as the primary reasoning engine (6000 RPM rate limit).
+
+The system implements **Agentic RAG** through a hybrid retrieval strategy: **Pinecone** vector database (multilingual-e5-large embeddings) for semantic search across ingested blog content and stored research, **Neo4j** knowledge graph for entity relationship traversal (MarketingEntity nodes with OPTIMIZES_FOR, CONNECTED_TO relationships), and **Tavily** web search API for real-time information retrieval. **Zep** manages conversation memory with session-based persistence, while **Upstash Redis** handles aggressive caching (7-day TTL for research queries) and rate limit tracking.
+
+**LangSmith** provides comprehensive observability, automatically tracing all LangGraph nodes, LLM calls (prompts, responses, tokens, latency), and tool invocations. The frontend uses **React** with **Server-Sent Events (SSE)** for real-time token streaming and tool call visibility.
+
+### Challenges & Solutions
+
+Key challenges included Groq's strict rate limits (30 RPM on Llama-3.3-70B), which caused frequent 429 errors during multi-step workflows. This was resolved by switching to Llama-3.1-8B-instant (6000 RPM) and implementing a client-side sliding window rate limiter (5000 RPM) with exponential backoff retries. The rate limiter uses Redis-backed request tracking to prevent exceeding API limits.
+
+Another persistent issue was a Python virtual environment port conflict (e.g., 5469), where even after changing ports, the app failed to start due to a hidden UnicodeEncodeError in UTF-8 handling during logging and Uvicorn binding. This was fixed by enforcing global UTF-8 encoding in the evaluation script and sanitizing debug outputs. Additionally, synchronous Redis operations were blocking the async event loop, resolved by wrapping all cache operations in `asyncio.run_in_executor()`.
+
+Frontend infinite reload loops were caused by `useEffect` dependency cycles in the BlogDataContext, where `fetchBlogSources` was recreated on every render. This was fixed by using `useRef` for the fetching flag and adding cache staleness checks before triggering refreshes.
+
+### Potential Improvements & Next Steps
+
+1. **Latency Optimization**: Cut response time via adaptive LangGraph timeouts, parallel tool calls, and aggressive Redis caching—target <15s P50. Currently, sequential tool execution and synchronous operations add overhead.
+
+2. **Entity Extraction Quality**: Boost entity extraction F1 from 0.121 to >0.70 via refined Groq prompts and dedicated NER models. Current rule-based extraction misses nuanced entity relationships.
+
+3. **User Authentication & Personalization**: Add JWT user authentication with Postgres for persistent user preferences and MemGPT for per-user long-term memory, enabling personalized marketing strategies.
+
+4. **Live Ad Platform Integration**: Integrate Meta/Google Ads APIs for real-time CSV analysis and campaign optimization, moving beyond static blog content to actionable ad performance data.
+
+5. **Production Deployment**: Deploy on AWS Bedrock with Langfuse feedback loops for automatic prompt refinement based on user interactions and evaluation metrics.
 
 ## 🚀 Quick Start
 
@@ -21,227 +52,91 @@ Marketing Cortex (ZMC) is a sophisticated multi-agent AI system that orchestrate
 
 - Python 3.10+
 - Docker & Docker Compose (for Neo4j only)
-- Neo4j AuraDB account (or local Neo4j)
-- Upstash Redis account (serverless)
-- API keys for: Groq, LangSmith, Pinecone, Zep, Tavily
+- API keys: Groq, LangSmith, Neo4j, Pinecone, Zep, Upstash Redis, Tavily
 
 ### Installation
 
-1. **Clone the repository**
 ```bash
-git clone https://github.com/yourusername/Zocket-Marketing-Cortex.git
+# Clone and setup
+git clone https://github.com/drew-jay/Zocket-Marketing-Cortex.git
 cd Zocket-Marketing-Cortex
-```
-
-2. **Create virtual environment**
-```bash
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-```
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
-3. **Install dependencies**
-```bash
+# Install dependencies
 pip install -r requirements.txt
-```
 
-4. **Set up environment variables**
-```bash
+# Configure environment
 cp env.example .env
-# Edit .env with your API keys and Upstash Redis URL
-# Get your Upstash Redis URL from: https://console.upstash.com/redis
-```
+# Edit .env with your API keys
 
-5. **Start infrastructure (Neo4j only - Redis is serverless)**
-```bash
+# Start Neo4j (Redis is serverless)
 docker-compose up -d
+
+# Run application
+uvicorn src.main:app --reload --port 5469
 ```
 
-6. **Initialize database and seed sample data**
-```bash
-python scripts/seed_data.py
-```
-
-7. **Run the application**
-```bash
-uvicorn src.main:app --reload
-```
-
-The API will be available at `http://localhost:5469`
-
-## 📚 API Documentation
-
-Once running, visit:
-- **Interactive API Docs**: http://localhost:5469/docs
-- **Alternative Docs**: http://localhost:5469/redoc
-
-### Key Endpoints
-
-- `GET /` - Root endpoint with system info
-- `GET /api/health` - Health check for all services
-- `POST /api/run-agent` - Main agent orchestration endpoint
-- `POST /api/campaigns` - Create campaign in knowledge graph
-- `GET /api/campaigns/{id}` - Get campaign hierarchy
-- `GET /api/high-performers` - Query high-performing creatives
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────┐
-│         Marketing Cortex (ZMC)          │
-│           FastAPI Backend               │
-├─────────────────────────────────────────┤
-│  Supervisor Agent (LangGraph)           │
-│       ↓         ↓         ↓             │
-│  Performance  Research  Creative        │
-│   Analyst    Assistant  Optimizer       │
-│       ↓         ↓         ↓             │
-│  Knowledge Layer (Neo4j + Pinecone)     │
-│  Observability (LangSmith + Langfuse)   │
-└─────────────────────────────────────────┘
-```
-
-### Components
-
-- **Supervisor Agent**: Intent classification and routing (Phase 2)
-- **Performance Analyst**: CSV analysis and insights (Phase 2)
-- **Research Assistant**: Web research with Tavily (Phase 2)
-- **Creative Optimizer**: Ad copy generation (Phase 2)
-- **Knowledge Graph**: Neo4j for structured campaign data
-- **Vector Store**: Pinecone for semantic search (Phase 2)
-- **Memory**: Zep for conversation persistence
-- **Cache**: Redis for performance optimization
-
-## 🧪 Testing
-
-### Test Structure
-
-The project includes comprehensive test coverage:
-
-- **Unit Tests**: Test individual components in isolation
-- **Integration Tests**: Test component interactions
-- **End-to-End Tests**: Test complete user workflows
-- **Pipeline Tests**: CI/CD automated testing
-
-### Running Tests
-
-**Quick test run:**
-```bash
-# Run all tests
-pytest tests/ -v
-
-# Run specific test types
-pytest tests/ -m unit -v          # Unit tests only
-pytest tests/ -m integration -v    # Integration tests only
-pytest tests/ -m e2e -v            # E2E tests only
-```
-
-**With coverage:**
-```bash
-pytest tests/ --cov=src --cov-report=html --cov-report=term-missing
-# View coverage report: open htmlcov/index.html
-```
-
-**Using test scripts:**
-```bash
-# Linux/Mac
-./scripts/run_tests.sh
-./scripts/run_tests.sh --e2e        # Include E2E tests
-./scripts/run_tests.sh --coverage   # With coverage
-
-# Windows
-scripts\run_tests.bat
-scripts\run_tests.bat --e2e
-scripts\run_tests.bat --coverage
-```
-
-### Test Files
-
-- `tests/test_api_blog_endpoints.py` - Blog API endpoint tests
-- `tests/test_blog_ingestion.py` - Blog ingestion unit tests
-- `tests/test_vector_store_blog.py` - Vector store blog methods tests
-- `tests/test_research_assistant_blog_tool.py` - Agent blog tool tests
-- `tests/test_integration.py` - Integration tests
-- `tests/test_e2e.py` - End-to-end workflow tests
-- `tests/test_frontend_components.py` - Frontend component structure tests
-
-### CI/CD Pipeline
-
-The project includes GitHub Actions CI pipeline (`.github/workflows/ci.yml`) that:
-- Runs backend tests with Neo4j service
-- Runs frontend linting and TypeScript checks
-- Runs integration tests
-- Generates coverage reports
-
-### Test Coverage Goals
-
-- Unit tests: >80% coverage
-- Integration tests: All critical paths
-- E2E tests: All major user workflows
-
-## 📊 Phase 1 Status (Current)
-
-**✅ Completed:**
-- [x] Project structure and dependencies
-- [x] Neo4j knowledge graph schema
-- [x] Zep memory integration
-- [x] FastAPI skeleton with /run-agent endpoint
-- [x] Health check and monitoring
-- [x] Sample data and test infrastructure
-- [x] Docker Compose setup
-- [x] Render deployment configuration
-
-**📈 Success Criteria Met:**
-- ✅ Server responds to health checks
-- ✅ Neo4j stores and retrieves campaigns
-- ✅ Zep recalls conversation history
-- ✅ Basic API documentation generated
-- ✅ Sample data loaded successfully
-
-## 🔜 Next Steps (Phase 2)
-
-- [ ] Build Performance Analyst agent
-- [ ] Build Research Assistant agent
-- [ ] Build Creative Optimizer agent
-- [ ] Implement Supervisor orchestration
-- [ ] Add LangGraph state management
-- [ ] Integrate Pinecone vector store
-
-## 📖 Documentation
-
-- [PROJECT_REFERENCE.md](PROJECT_REFERENCE.md) - Comprehensive project documentation (742 lines)
-- [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - Quick reference guide (250 lines)
-- [API Documentation](http://localhost:5469/docs) - Interactive API docs
+API available at `http://localhost:5469/docs`
 
 ## 🛠️ Technology Stack
 
 | Technology | Purpose |
 |------------|---------|
-| Python 3.10+ | Core language |
+| LangGraph | Multi-step workflow orchestration |
+| LangChain | LLM integration & tool binding |
+| Groq (Llama-3.1-8B) | Agent reasoning & synthesis |
+| Pinecone | Vector RAG (semantic search) |
+| Neo4j | Knowledge graph (entity relationships) |
+| Tavily | Web search API |
+| Zep | Conversation memory |
+| Upstash Redis | Caching & rate limiting |
+| LangSmith | Observability & tracing |
 | FastAPI | Backend API framework |
-| LangGraph | Agent orchestration |
-| LangChain | LLM integration |
-| Neo4j | Knowledge graph |
-| Pinecone | Vector database |
-| Zep | Memory management |
-| Redis | Caching layer |
-| LangSmith | Observability |
-| Tavily | Web search |
+| React | Frontend with SSE streaming |
 
-## 🤝 Contributing
+## 📊 Key Features
 
-This is a portfolio project for the Zocket AI Agent Developer position. For questions or feedback, please reach out.
+- **Multi-Step Reasoning**: LangGraph workflow with query refinement
+- **Hybrid RAG**: Combines vector search (Pinecone), graph traversal (Neo4j), and web search (Tavily)
+- **Real-Time Streaming**: SSE-based token streaming with tool call visibility
+- **Production Observability**: LangSmith tracing for all workflow nodes
+- **Rate Limit Management**: Client-side rate limiting with exponential backoff
+
+## 📈 Evaluation Metrics
+
+**Benchmark Dataset:** 20 marketing queries
+
+| Metric | Mean | Min | Max |
+|--------|------|-----|-----|
+| **Success Rate** | 100% | - | - |
+| **Relevance Score** | 0.076 | 0.034 | 0.151 |
+| **ROUGE-1 F1** | 0.151 | 0.084 | 0.232 |
+| **ROUGE-2 F1** | 0.034 | 0.008 | 0.093 |
+| **ROUGE-L F1** | 0.091 | 0.063 | 0.150 |
+| **Response Time** | 58.0s | 25.0s | 103.1s |
+
+**Evaluation Method:** Fast rule-based metrics (Word Overlap for Relevance, ROUGE for Summaries) - no LLM judge required.
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+pytest tests/ -v
+
+# With coverage
+pytest tests/ --cov=src --cov-report=html
+```
+
+## 📖 Documentation
+
+- [PROJECT_REFERENCE.md](PROJECT_REFERENCE.md) - Comprehensive project documentation
+- [API Documentation](http://localhost:5469/docs) - Interactive API docs
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) file for details
+MIT License
 
-## 🎓 Project Context
-
-This project demonstrates:
-- Multi-agent system architecture
-- Graph RAG and Agentic RAG implementation
-- Production-ready observability and evaluation
-- Integration with external APIs and services
-- Scalable, modular design patterns
+---
 
 Built as part of the application for the AI Agent Developer role at Zocket.

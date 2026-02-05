@@ -23,7 +23,8 @@ class Settings(BaseSettings):
     
     # Groq
     groq_api_key: str
-    groq_model: str = "llama-3.3-70b-versatile"  # Latest versatile model
+    groq_model: str = "llama-3.1-8b-instant"  # Fast model with 6000 RPM rate limit
+    groq_rate_limit: int = 5000  # Client-side rate limit (staying under Groq's 6000 RPM limit)
     
     # LangSmith
     langchain_tracing_v2: bool = True
@@ -31,14 +32,8 @@ class Settings(BaseSettings):
     langchain_api_key: str
     langchain_project: str = "marketing-cortex"
     
-    # Langfuse
-    langfuse_public_key: Optional[str] = None
-    langfuse_secret_key: Optional[str] = None
-    langfuse_host: str = "https://cloud.langfuse.com"
-    
     # Observability
     enable_langsmith: bool = True
-    enable_langfuse: bool = True
     circuit_breaker_failure_threshold: int = 5
     circuit_breaker_timeout: int = 60
     retry_max_attempts: int = 3
@@ -83,7 +78,9 @@ class Settings(BaseSettings):
     chunk_size: int = 500  # Tokens per chunk
     chunk_overlap: int = 50  # Overlap between chunks
     enable_entity_extraction: bool = True  # Enable entity extraction during blog ingestion
-    max_concurrent_posts: int = 5  # Maximum concurrent blog posts to process in parallel
+    max_concurrent_posts: int = 1  # Maximum concurrent blog posts (1 = sequential to avoid rate limits)
+    entity_extraction_delay: float = 0.5  # Delay between entity extractions in seconds (to avoid rate limits)
+    blog_processing_delay: float = 2.0  # Delay between blog posts in seconds
 
 
 # Global settings instance

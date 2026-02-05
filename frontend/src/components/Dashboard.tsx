@@ -4,7 +4,6 @@ import { useBlogData } from '../contexts/BlogDataContext';
 interface DashboardStats {
   totalBlogs: number;
   totalPosts: number;
-  lastUpdated: string | null;
 }
 
 export const Dashboard: React.FC = () => {
@@ -12,16 +11,10 @@ export const Dashboard: React.FC = () => {
 
   const stats = useMemo<DashboardStats>(() => {
     const totalPosts = sources.reduce((sum, s) => sum + s.total_posts, 0);
-    const lastUpdated = sources
-      .map(s => s.last_updated)
-      .filter(Boolean)
-      .sort()
-      .reverse()[0] || null;
 
     return {
       totalBlogs: sources.length,
       totalPosts,
-      lastUpdated,
     };
   }, [sources]);
 
@@ -58,13 +51,33 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
-        <p className="text-gray-600 mt-1">Overview of your blog ingestion system</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
+          <p className="text-gray-600 mt-1">
+            Overview of your blog ingestion system
+            {lastFetched && (
+              <span className="text-xs text-gray-400 ml-2">
+                • Last updated: {new Date(lastFetched).toLocaleTimeString()}
+              </span>
+            )}
+            <span className="text-xs text-gray-400 ml-2">
+              • Auto-refreshes every 30s
+            </span>
+          </p>
+        </div>
+        <button
+          onClick={() => refresh()}
+          disabled={loading}
+          className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          title="Manually refresh blog sources (e.g., after batch ingestion)"
+        >
+          {loading ? 'Refreshing...' : '🔄 Refresh'}
+        </button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
@@ -85,22 +98,6 @@ export const Dashboard: React.FC = () => {
             </div>
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
               <span className="text-2xl">📝</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6 border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Last Updated</p>
-              <p className="text-sm text-gray-900 mt-2">
-                {stats.lastUpdated
-                  ? new Date(stats.lastUpdated).toLocaleDateString()
-                  : 'Never'}
-              </p>
-            </div>
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <span className="text-2xl">🔄</span>
             </div>
           </div>
         </div>
